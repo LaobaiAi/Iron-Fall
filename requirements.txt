@@ -1,0 +1,33 @@
+# Iron-Fall 依赖包
+# 智能钢结构拆除决策系统
+
+# Web 框架
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+websockets>=12.0
+
+# 数据验证
+pydantic>=2.5.0
+
+# AI 框架
+langchain>=0.1.0
+langchain-openai>=0.0.5
+# langchain-core 已经包含在 langchain 中
+
+# 数值计算
+numpy>=1.26.0
+scipy>=1.11.0
+
+# HTTP 客户端
+httpx>=0.26.0
+
+# 开发依赖
+pytest>=7.4.0
+pytest-asyncio>=0.23.0
+pytest-cov>=4.1.0
+black>=24.1.0
+isort>=5.13.0
+mypy>=1.8.0
+
+# 可选: OpenSeesPy (深度非线性分析 - 高危模式)
+# openseespy>=3.5.0
