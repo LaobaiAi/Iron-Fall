@@ -5,9 +5,9 @@
 import os
 import json
 import asyncio
-from typing import Optional, Literal
+from typing import Optional, Literal, Any
 from langchain_openai import ChatOpenAI
-from langchain.agents import AgentExecutor, create_react_agent
+from langgraph.prebuilt import create_react_agent
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from langchain_core.tools import tool
@@ -43,7 +43,7 @@ class DemolitionAgent:
         self._temperature = temperature
         self._max_iterations = max_iterations
         self._llm: Optional[ChatOpenAI] = None
-        self._agent_executor: Optional[AgentExecutor] = None
+        self._agent: Optional[Any] = None
         self._current_model: Optional[StructureModel] = None
         self._tools = self._create_tools()
         
@@ -77,35 +77,13 @@ class DemolitionAgent:
             api_key=api_key
         )
     
-    def _create_prompt(self) -> ChatPromptTemplate:
-        """创建 ReAct Agent 的提示词模板"""
-        
-        prompt = ChatPromptTemplate.from_messages([
-            SystemMessage(content=SYSTEM_PROMPT),
-            MessagesPlaceholder(variable_name="chat_history", optional=True),
-            HumanMessage(content="{input}"),
-            MessagesPlaceholder(variable_name="agent_scratchpad")
-        ])
-        
-        return prompt
-    
     def initialize(self) -> None:
         """初始化 Agent (延迟加载)"""
-        if self._agent_executor is None:
+        if self._agent is None:
             self._llm = self._initialize_llm()
-            
-            base_agent = create_react_agent(
+            self._agent = create_react_agent(
                 llm=self._llm,
                 tools=self._tools,
-                prompt=self._create_prompt()
-            )
-            
-            self._agent_executor = AgentExecutor(
-                agent=base_agent,
-                tools=self._tools,
-                max_iterations=self._max_iterations,
-                verbose=True,
-                handle_parsing_errors=True
             )
     
     async def generate_plan(
@@ -147,11 +125,14 @@ class DemolitionAgent:
             
             if asyncio.get_event_loop().is_running():
                 result = await asyncio.to_thread(
-                    self._agent_executor.invoke,
-                    {"input": input_text}
+                    self._agent.invoke,
+                    {"messages": [("user", input_text)]}
                 )
             else:
-                result = self._agent_executor.invoke({"input": input_text})
+                result = self._agent.invoke({"messages": [("user", input_text)]})
+            
+            messages = result.get("messages", [])
+            output = messages[-1].content if messages else ""
             
             output = result.get("output", "")
             

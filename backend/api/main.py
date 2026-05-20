@@ -371,6 +371,9 @@ async def websocket_demolition(websocket: WebSocket):
     """
     await manager.connect(websocket)
     
+    # 获取引擎实例
+    frame3dd = app.state.frame3dd
+    
     try:
         while True:
             data = await websocket.receive_json()
@@ -382,32 +385,54 @@ async def websocket_demolition(websocket: WebSocket):
             elif msg_type == "demolish":
                 start_time = time.time()
                 
-                model = StructureModel(**data.get("model", {}))
-                action = DemolitionAction(**data.get("action", {}))
-                
-                # 执行分析
-                result = await app.state.frame3dd.run_dynamic_analysis(
-                    model, action
-                )
-                
-                response = {
-                    "type": "result",
-                    "success": result.is_safe,
-                    "analysis": result.model_dump(),
-                    "latency_ms": (time.time() - start_time) * 1000
-                }
-                
-                await websocket.send_json(response)
+                try:
+                    model = StructureModel(**data.get("model", {}))
+                    action = DemolitionAction(**data.get("action", {}))
+                    
+                    # 执行分析
+                    result = await frame3dd.run_dynamic_analysis(
+                        model, action
+                    )
+                    
+                    response = {
+                        "type": "result",
+                        "success": result.is_safe,
+                        "analysis": result.model_dump(),
+                        "latency_ms": (time.time() - start_time) * 1000
+                    }
+                    
+                    await websocket.send_json(response)
+                    
+                except Exception as e:
+                    logger.error(f"Demolish 处理错误: {e}")
+                    await websocket.send_json({
+                        "type": "result",
+                        "success": False,
+                        "analysis": {
+                            "stability_status": "Error",
+                            "is_safe": False,
+                            "warnings": [f"处理错误: {str(e)}"]
+                        },
+                        "latency_ms": (time.time() - start_time) * 1000
+                    })
             
             elif msg_type == "validate":
-                model = StructureModel(**data.get("model", {}))
-                is_valid, error = await app.state.frame3dd.validate_model(model)
-                
-                await websocket.send_json({
-                    "type": "validation_result",
-                    "is_valid": is_valid,
-                    "error": error
-                })
+                try:
+                    model = StructureModel(**data.get("model", {}))
+                    is_valid, error = await frame3dd.validate_model(model)
+                    
+                    await websocket.send_json({
+                        "type": "validation_result",
+                        "is_valid": is_valid,
+                        "error": error
+                    })
+                except Exception as e:
+                    logger.error(f"Validate 处理错误: {e}")
+                    await websocket.send_json({
+                        "type": "validation_result",
+                        "is_valid": False,
+                        "error": str(e)
+                    })
             
             else:
                 await websocket.send_json({
@@ -421,10 +446,13 @@ async def websocket_demolition(websocket: WebSocket):
     
     except Exception as e:
         logger.error(f"WebSocket 错误: {e}")
-        await websocket.send_json({
-            "type": "error",
-            "message": str(e)
-        })
+        try:
+            await websocket.send_json({
+                "type": "error",
+                "message": str(e) or "Unknown error"
+            })
+        except:
+            pass
 
 
 # ============================================================================

@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Iron-Fall Web 客户端</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh;
+            color: #e0e0e0;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            text-align: center;
+            padding: 30px 0;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            background: linear-gradient(90deg, #00d9ff, #00ff88);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #888;
+            font-size: 1rem;
+        }
+
+        .connection-panel {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #666;
+            transition: all 0.3s ease;
+        }
+
+        .status-indicator.connected {
+            background: #00ff88;
+            box-shadow: 0 0 12px #00ff88;
+        }
+
+        .status-indicator.connecting {
+            background: #ffaa00;
+            animation: pulse 1s infinite;
+        }
+
+        .status-indicator.disconnected {
+            background: #ff4757;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .btn {
+            padding: 10px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #00d9ff, #0099cc);
+            color: #fff;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 217, 255, 0.4);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #ff4757, #ff6b81);
+            color: #fff;
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #00ff88, #00cc6a);
+            color: #1a1a2e;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        @media (max-width: 900px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .panel {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            padding: 24px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .panel-title {
+            font-size: 1.2rem;
+            margin-bottom: 16px;
+            color: #00d9ff;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .model-input {
+            width: 100%;
+            height: 200px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 12px;
+            color: #e0e0e0;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 13px;
+            resize: vertical;
+            margin-bottom: 12px;
+        }
+
+        .model-input:focus {
+            outline: none;
+            border-color: #00d9ff;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .log-panel {
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 12px;
+            padding: 16px;
+            height: 400px;
+            overflow-y: auto;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 13px;
+        }
+
+        .log-entry {
+            padding: 8px 12px;
+            margin-bottom: 4px;
+            border-radius: 6px;
+            border-left: 3px solid;
+        }
+
+        .log-entry.sent {
+            background: rgba(0, 217, 255, 0.1);
+            border-color: #00d9ff;
+        }
+
+        .log-entry.received {
+            background: rgba(0, 255, 136, 0.1);
+            border-color: #00ff88;
+        }
+
+        .log-entry.error {
+            background: rgba(255, 71, 87, 0.1);
+            border-color: #ff4757;
+        }
+
+        .log-entry.info {
+            background: rgba(255, 170, 0, 0.1);
+            border-color: #ffaa00;
+        }
+
+        .log-time {
+            color: #666;
+            margin-right: 8px;
+        }
+
+        .log-type {
+            font-weight: 600;
+            margin-right: 8px;
+        }
+
+        .log-entry.sent .log-type { color: #00d9ff; }
+        .log-entry.received .log-type { color: #00ff88; }
+        .log-entry.error .log-type { color: #ff4757; }
+        .log-entry.info .log-type { color: #ffaa00; }
+
+        .result-panel {
+            margin-top: 20px;
+        }
+
+        .result-card {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 12px;
+        }
+
+        .result-card.success {
+            border-left: 4px solid #00ff88;
+        }
+
+        .result-card.error {
+            border-left: 4px solid #ff4757;
+        }
+
+        .result-title {
+            font-weight: 600;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .result-card.success .result-title { color: #00ff88; }
+        .result-card.error .result-title { color: #ff4757; }
+
+        .result-data {
+            font-family: 'Consolas', monaco, monospace;
+            font-size: 12px;
+            color: #aaa;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        .quick-actions {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 12px;
+            margin-top: 20px;
+        }
+
+        .quick-action-card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 16px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .quick-action-card:hover {
+            background: rgba(255, 255, 255, 0.1);
+            transform: translateY(-2px);
+        }
+
+        .quick-action-title {
+            font-weight: 600;
+            color: #00d9ff;
+            margin-bottom: 4px;
+        }
+
+        .quick-action-desc {
+            font-size: 12px;
+            color: #888;
+        }
+
+        footer {
+            text-align: center;
+            padding: 30px;
+            color: #666;
+            font-size: 12px;
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Iron-Fall</h1>
+            <p class="subtitle">智能钢结构拆除决策系统 - Web 客户端</p>
+        </header>
+
+        <div class="connection-panel">
+            <div class="connection-status">
+                <div class="status-indicator" id="statusIndicator"></div>
+                <span id="statusText">未连接</span>
+            </div>
+            <div class="action-buttons">
+                <button class="btn btn-primary" id="connectBtn" onclick="connect()">连接服务器</button>
+                <button class="btn btn-danger" id="disconnectBtn" onclick="disconnect()" disabled>断开连接</button>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="panel">
+                <h3 class="panel-title">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                    </svg>
+                    发送消息
+                </h3>
+                
+                <textarea class="model-input" id="messageInput" placeholder="输入 JSON 消息...">{
+  "type": "demolish",
+  "model": {
+    "model_id": "demo_001",
+    "name": "示例钢结构",
+    "nodes": [
+      {"id": 1, "x": 0, "y": 0, "z": 0, "restraint": [true, true, true, true, true, true]},
+      {"id": 2, "x": 5, "y": 0, "z": 0, "restraint": [true, true, true, true, true, true]},
+      {"id": 3, "x": 0, "y": 0, "z": 4, "restraint": [false, false, false, false, false, false]},
+      {"id": 4, "x": 5, "y": 0, "z": 4, "restraint": [false, false, false, false, false, false]},
+      {"id": 5, "x": 2.5, "y": 0, "z": 6, "restraint": [false, false, false, false, false, false]}
+    ],
+    "elements": [
+      {"id": 1, "node_i_id": 1, "node_j_id": 3, "section_id": 1, "material_id": 1, "element_type": "Column"},
+      {"id": 2, "node_i_id": 2, "node_j_id": 4, "section_id": 1, "material_id": 1, "element_type": "Column"},
+      {"id": 3, "node_i_id": 3, "node_j_id": 4, "section_id": 1, "material_id": 1, "element_type": "Beam"},
+      {"id": 4, "node_i_id": 3, "node_j_id": 5, "section_id": 1, "material_id": 1, "element_type": "Beam"},
+      {"id": 5, "node_i_id": 4, "node_j_id": 5, "section_id": 1, "material_id": 1, "element_type": "Beam"}
+    ],
+    "sections": [
+      {"id": 1, "name": "H400x200", "A": 8000, "Iy": 2.1e8, "Iz": 1.3e8, "J": 5.0e6}
+    ],
+    "materials": [
+      {"id": 1, "name": "Q355", "E": 206000, "fy": 355, "density": 7850}
+    ]
+  },
+  "action": {
+    "step": 1,
+    "target_element_ids": [4],
+    "action_type": "Remove"
+  }
+}</textarea>
+                
+                <div class="action-buttons">
+                    <button class="btn btn-success" id="sendBtn" onclick="sendMessage()" disabled>发送 demolish</button>
+                    <button class="btn btn-primary" id="validateBtn" onclick="sendValidate()" disabled>发送 validate</button>
+                    <button class="btn btn-primary" id="pingBtn" onclick="sendPing()" disabled>发送 ping</button>
+                </div>
+
+                <div class="quick-actions">
+                    <div class="quick-action-card" onclick="loadDemo('simple')">
+                        <div class="quick-action-title">简单模型</div>
+                        <div class="quick-action-desc">单层钢架结构示例</div>
+                    </div>
+                    <div class="quick-action-card" onclick="loadDemo('complex')">
+                        <div class="quick-action-title">复杂模型</div>
+                        <div class="quick-action-desc">多层钢结构建筑</div>
+                    </div>
+                    <div class="quick-action-card" onclick="loadDemo('validate')">
+                        <div class="quick-action-title">仅验证</div>
+                        <div class="quick-action-desc">快速验证模型有效性</div>
+                    </div>
+                </div>
+
+                <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.1);">
+                    <h4 style="color: #00ff88; margin-bottom: 12px;">迭代测试</h4>
+                    <div class="action-buttons">
+                        <button class="btn btn-success" id="testBtn" onclick="toggleIterationTest()">开始迭代测试</button>
+                        <button class="btn btn-primary" id="autoReconnectBtn" onclick="toggleAutoReconnect()">开启自动重连</button>
+                    </div>
+                    <p id="testStatus" style="color: #888; font-size: 12px; margin-top: 8px;"></p>
+                    <p style="color: #666; font-size: 11px; margin-top: 8px;">
+                        迭代测试: 自动发送 demolish 请求，可用于测试后端稳定性
+                    </p>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h3 class="panel-title">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="4 17 10 11 4 5"></polyline>
+                        <line x1="12" y1="19" x2="20" y2="19"></line>
+                    </svg>
+                    通信日志
+                </h3>
+                <div class="log-panel" id="logPanel"></div>
+            </div>
+        </div>
+
+        <div class="panel result-panel" id="resultPanel">
+            <h3 class="panel-title">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                    <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                </svg>
+                最新响应
+            </h3>
+            <div id="resultContent">
+                <p style="color: #666; text-align: center; padding: 40px;">
+                    暂无响应数据
+                </p>
+            </div>
+        </div>
+
+        <footer>
+            Iron-Fall Web Client &copy; 2026 | 
+            WebSocket: ws://localhost:8000/ws/demolition
+        </footer>
+    </div>
+
+    <script>
+        let ws = null;
+        let messageId = 0;
+        let reconnectAttempts = 0;
+        let maxReconnectAttempts = 5;
+        let reconnectTimer = null;
+        let autoReconnect = false;
+        let testIterations = 0;
+        let maxTestIterations = 10;
+        let isTesting = false;
+        let testInterval = null;
+
+        const statusIndicator = document.getElementById('statusIndicator');
+        const statusText = document.getElementById('statusText');
+        const connectBtn = document.getElementById('connectBtn');
+        const disconnectBtn = document.getElementById('disconnectBtn');
+        const sendBtn = document.getElementById('sendBtn');
+        const validateBtn = document.getElementById('validateBtn');
+        const pingBtn = document.getElementById('pingBtn');
+        const logPanel = document.getElementById('logPanel');
+        const resultContent = document.getElementById('resultContent');
+        const messageInput = document.getElementById('messageInput');
+
+        function updateStatus(status) {
+            statusIndicator.className = 'status-indicator ' + status;
+            switch(status) {
+                case 'connected':
+                    statusText.textContent = '已连接';
+                    reconnectAttempts = 0;
+                    connectBtn.disabled = true;
+                    disconnectBtn.disabled = false;
+                    sendBtn.disabled = false;
+                    validateBtn.disabled = false;
+                    pingBtn.disabled = false;
+                    break;
+                case 'connecting':
+                    statusText.textContent = '连接中...';
+                    connectBtn.disabled = true;
+                    break;
+                case 'disconnected':
+                    statusText.textContent = '未连接';
+                    connectBtn.disabled = false;
+                    disconnectBtn.disabled = true;
+                    sendBtn.disabled = true;
+                    validateBtn.disabled = true;
+                    pingBtn.disabled = true;
+                    break;
+            }
+        }
+
+        function addLog(type, message) {
+            const entry = document.createElement('div');
+            entry.className = 'log-entry ' + type;
+            const time = new Date().toLocaleTimeString();
+            const typeText = type === 'sent' ? '发送' : type === 'received' ? '接收' : type === 'error' ? '错误' : '信息';
+            entry.innerHTML = `<span class="log-time">${time}</span><span class="log-type">[${typeText}]</span>${typeof message === 'object' ? JSON.stringify(message, null, 2) : message}`;
+            logPanel.insertBefore(entry, logPanel.firstChild);
+        }
+
+        function showResult(success, data) {
+            const card = document.createElement('div');
+            card.className = 'result-card ' + (success ? 'success' : 'error');
+            card.innerHTML = `
+                <div class="result-title">
+                    ${success ? '✓ 成功' : '✗ 错误'}
+                </div>
+                <div class="result-data">${JSON.stringify(data, null, 2)}</div>
+            `;
+            resultContent.innerHTML = '';
+            resultContent.appendChild(card);
+        }
+
+        function connect() {
+            if (ws) {
+                ws.close();
+            }
+
+            updateStatus('connecting');
+            addLog('info', '正在连接到 ws://localhost:8000/ws/demolition...');
+
+            ws = new WebSocket('ws://localhost:8080/ws/demolition');
+
+            ws.onopen = function() {
+                updateStatus('connected');
+                addLog('info', 'WebSocket 连接已建立');
+                
+                if (autoReconnect && reconnectAttempts > 0) {
+                    addLog('info', `自动重连成功 (尝试 ${reconnectAttempts + 1})`);
+                }
+                
+                // 如果是迭代测试，继续发送
+                if (isTesting && testIterations < maxTestIterations) {
+                    sendNextTest();
+                }
+            };
+
+            ws.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    addLog('received', data);
+                    
+                    if (data.type === 'result' || data.type === 'validation_result' || data.type === 'pong') {
+                        showResult(data.success !== false, data);
+                        
+                        // 迭代测试：收到结果后继续
+                        if (isTesting && data.type === 'result') {
+                            testIterations++;
+                            updateTestStatus();
+                            if (testIterations < maxTestIterations) {
+                                setTimeout(sendNextTest, 500);
+                            } else {
+                                stopIterationTest();
+                            }
+                        }
+                    } else if (data.type === 'error') {
+                        showResult(false, data);
+                        // 迭代测试：遇到错误也继续
+                        if (isTesting) {
+                            testIterations++;
+                            updateTestStatus();
+                            if (testIterations < maxTestIterations) {
+                                setTimeout(sendNextTest, 500);
+                            } else {
+                                stopIterationTest();
+                            }
+                        }
+                    }
+                } catch (e) {
+                    addLog('received', event.data);
+                }
+            };
+
+            ws.onerror = function(error) {
+                addLog('error', 'WebSocket 连接错误');
+                updateStatus('disconnected');
+            };
+
+            ws.onclose = function(event) {
+                updateStatus('disconnected');
+                addLog('info', `WebSocket 连接已关闭 (code: ${event.code}, reason: ${event.reason || '无'})`);
+                ws = null;
+                
+                // 自动重连逻辑
+                if (autoReconnect && reconnectAttempts < maxReconnectAttempts) {
+                    reconnectAttempts++;
+                    addLog('info', `${reconnectAttempts} 秒后自动重连... (${reconnectAttempts}/${maxReconnectAttempts})`);
+                    reconnectTimer = setTimeout(() => connect(), 1000);
+                } else if (autoReconnect) {
+                    addLog('error', `达到最大重连次数 (${maxReconnectAttempts})，停止自动重连`);
+                    autoReconnect = false;
+                    updateAutoReconnectButton();
+                }
+            };
+        }
+
+        function disconnect() {
+            autoReconnect = false;
+            updateAutoReconnectButton();
+            stopIterationTest();
+            
+            if (reconnectTimer) {
+                clearTimeout(reconnectTimer);
+                reconnectTimer = null;
+            }
+            
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+            updateStatus('disconnected');
+            addLog('info', '主动断开连接');
+        }
+
+        function sendMessage() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                addLog('error', '未连接到服务器');
+                return;
+            }
+
+            try {
+                const msg = JSON.parse(messageInput.value);
+                msg.id = ++messageId;
+                ws.send(JSON.stringify(msg));
+                addLog('sent', msg);
+            } catch (e) {
+                addLog('error', 'JSON 格式错误: ' + e.message);
+            }
+        }
+
+        function sendValidate() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                addLog('error', '未连接到服务器');
+                return;
+            }
+
+            try {
+                const modelData = JSON.parse(messageInput.value);
+                const msg = {
+                    type: 'validate',
+                    model: modelData.model || modelData,
+                    id: ++messageId
+                };
+                ws.send(JSON.stringify(msg));
+                addLog('sent', msg);
+            } catch (e) {
+                addLog('error', 'JSON 格式错误: ' + e.message);
+            }
+        }
+
+        function sendPing() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                addLog('error', '未连接到服务器');
+                return;
+            }
+
+            const msg = { type: 'ping', id: ++messageId };
+            ws.send(JSON.stringify(msg));
+            addLog('sent', msg);
+        }
+
+        // ==================== 迭代测试功能 ====================
+        
+        function updateAutoReconnectButton() {
+            const btn = document.getElementById('autoReconnectBtn');
+            if (btn) {
+                btn.textContent = autoReconnect ? '关闭自动重连' : '开启自动重连';
+                btn.className = autoReconnect ? 'btn btn-danger' : 'btn btn-primary';
+            }
+        }
+
+        function toggleAutoReconnect() {
+            autoReconnect = !autoReconnect;
+            updateAutoReconnectButton();
+            addLog('info', `自动重连已${autoReconnect ? '开启' : '关闭'}`);
+        }
+
+        function updateTestStatus() {
+            const btn = document.getElementById('testBtn');
+            const status = document.getElementById('testStatus');
+            if (btn) {
+                btn.textContent = isTesting ? '停止测试' : '开始迭代测试';
+                btn.className = isTesting ? 'btn btn-danger' : 'btn btn-success';
+            }
+            if (status) {
+                status.textContent = isTesting ? `测试中: ${testIterations}/${maxTestIterations}` : '';
+            }
+        }
+
+        function sendNextTest() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                addLog('error', '迭代测试失败: 未连接到服务器');
+                stopIterationTest();
+                return;
+            }
+
+            // 生成随机测试数据
+            const elementId = Math.floor(Math.random() * 5) + 1;
+            const msg = {
+                type: 'demolish',
+                model: {
+                    model_id: `test_${Date.now()}`,
+                    name: `迭代测试 ${testIterations + 1}`,
+                    nodes: [
+                        {id: 1, x: 0, y: 0, z: 0, restraint: [true, true, true, true, true, true]},
+                        {id: 2, x: 6, y: 0, z: 0, restraint: [true, true, true, true, true, true]},
+                        {id: 3, x: 0, y: 0, z: 4, restraint: [false, false, false, false, false, false]},
+                        {id: 4, x: 6, y: 0, z: 4, restraint: [false, false, false, false, false, false]}
+                    ],
+                    elements: [
+                        {id: 1, node_i_id: 1, node_j_id: 3, section_id: 1, material_id: 1, element_type: 'Column'},
+                        {id: 2, node_i_id: 2, node_j_id: 4, section_id: 1, material_id: 1, element_type: 'Column'},
+                        {id: 3, node_i_id: 3, node_j_id: 4, section_id: 1, material_id: 1, element_type: 'Beam'},
+                        {id: 4, node_i_id: 3, node_j_id: 4, section_id: 1, material_id: 1, element_type: 'Brace'}
+                    ],
+                    sections: [{id: 1, name: 'H300x150', A: 6000, Iy: 1.2e8, Iz: 6.7e7, J: 3.0e6}],
+                    materials: [{id: 1, name: 'Q355', E: 206000, fy: 355, density: 7850}]
+                },
+                action: { step: testIterations + 1, target_element_ids: [elementId], action_type: 'Remove' }
+            };
+
+            addLog('info', `发送测试请求 #${testIterations + 1}, 拆除构件 ${elementId}`);
+            ws.send(JSON.stringify(msg));
+        }
+
+        function startIterationTest() {
+            if (isTesting) return;
+            
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                addLog('info', '迭代测试: 先连接服务器...');
+                autoReconnect = true;
+                updateAutoReconnectButton();
+                connect();
+            }
+            
+            isTesting = true;
+            testIterations = 0;
+            updateTestStatus();
+            addLog('info', `开始迭代测试 (最多 ${maxTestIterations} 次)`);
+            
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                sendNextTest();
+            }
+        }
+
+        function stopIterationTest() {
+            isTesting = false;
+            updateTestStatus();
+            addLog('info', `迭代测试完成 (共 ${testIterations} 次)`);
+        }
+
+        function toggleIterationTest() {
+            if (isTesting) {
+                stopIterationTest();
+            } else {
+                startIterationTest();
+            }
+        }
+
+        function loadDemo(type) {
+            let demo = {};
+            
+            if (type === 'simple') {
+                demo = {
+                    type: 'demolish',
+                    model: {
+                        model_id: 'simple_001',
+                        name: '简单钢架',
+                        nodes: [
+                            {id: 1, x: 0, y: 0, z: 0, restraint: [true, true, true, true, true, true]},
+                            {id: 2, x: 6, y: 0, z: 0, restraint: [true, true, true, true, true, true]},
+                            {id: 3, x: 0, y: 0, z: 4, restraint: [false, false, false, false, false, false]},
+                            {id: 4, x: 6, y: 0, z: 4, restraint: [false, false, false, false, false, false]}
+                        ],
+                        elements: [
+                            {id: 1, node_i_id: 1, node_j_id: 3, section_id: 1, material_id: 1, element_type: 'Column'},
+                            {id: 2, node_i_id: 2, node_j_id: 4, section_id: 1, material_id: 1, element_type: 'Column'},
+                            {id: 3, node_i_id: 3, node_j_id: 4, section_id: 1, material_id: 1, element_type: 'Beam'}
+                        ],
+                        sections: [{id: 1, name: 'H300x150', A: 6000, Iy: 1.2e8, Iz: 6.7e7, J: 3.0e6}],
+                        materials: [{id: 1, name: 'Q355', E: 206000, fy: 355, density: 7850}]
+                    },
+                    action: { step: 1, target_element_ids: [3], action_type: 'Remove' }
+                };
+            } else if (type === 'complex') {
+                demo = {
+                    type: 'demolish',
+                    model: {
+                        model_id: 'complex_001',
+                        name: '多层钢结构',
+                        nodes: [
+                            {id: 1, x: 0, y: 0, z: 0, restraint: [true, true, true, true, true, true]},
+                            {id: 2, x: 8, y: 0, z: 0, restraint: [true, true, true, true, true, true]},
+                            {id: 3, x: 0, y: 0, z: 4, restraint: [false, false, false, false, false, false]},
+                            {id: 4, x: 8, y: 0, z: 4, restraint: [false, false, false, false, false, false]},
+                            {id: 5, x: 0, y: 0, z: 8, restraint: [false, false, false, false, false, false]},
+                            {id: 6, x: 8, y: 0, z: 8, restraint: [false, false, false, false, false, false]},
+                            {id: 7, x: 4, y: 0, z: 10, restraint: [false, false, false, false, false, false]},
+                            {id: 8, x: 4, y: 0, z: 12, restraint: [false, false, false, false, false, false]}
+                        ],
+                        elements: [
+                            {id: 1, node_i_id: 1, node_j_id: 3, section_id: 1, material_id: 1, element_type: 'Column'},
+                            {id: 2, node_i_id: 2, node_j_id: 4, section_id: 1, material_id: 1, element_type: 'Column'},
+                            {id: 3, node_i_id: 3, node_j_id: 5, section_id: 1, material_id: 1, element_type: 'Column'},
+                            {id: 4, node_i_id: 4, node_j_id: 6, section_id: 1, material_id: 1, element_type: 'Column'},
+                            {id: 5, node_i_id: 3, node_j_id: 4, section_id: 1, material_id: 1, element_type: 'Beam'},
+                            {id: 6, node_i_id: 5, node_j_id: 6, section_id: 1, material_id: 1, element_type: 'Beam'},
+                            {id: 7, node_i_id: 3, node_j_id: 7, section_id: 1, material_id: 1, element_type: 'Beam'},
+                            {id: 8, node_i_id: 4, node_j_id: 7, section_id: 1, material_id: 1, element_type: 'Beam'},
+                            {id: 9, node_i_id: 5, node_j_id: 7, section_id: 1, material_id: 1, element_type: 'Brace'},
+                            {id: 10, node_i_id: 6, node_j_id: 7, section_id: 1, material_id: 1, element_type: 'Brace'},
+                            {id: 11, node_i_id: 7, node_j_id: 8, section_id: 1, material_id: 1, element_type: 'Column'}
+                        ],
+                        sections: [
+                            {id: 1, name: 'H400x200', A: 8000, Iy: 2.1e8, Iz: 1.3e8, J: 5.0e6}
+                        ],
+                        materials: [
+                            {id: 1, name: 'Q355', E: 206000, fy: 355, density: 7850}
+                        ]
+                    },
+                    action: { step: 1, target_element_ids: [7], action_type: 'Remove' }
+                };
+            } else if (type === 'validate') {
+                demo = {
+                    type: 'validate',
+                    model: {
+                        model_id: 'validate_001',
+                        name: '验证测试',
+                        nodes: [
+                            {id: 1, x: 0, y: 0, z: 0, restraint: [true, true, true, true, true, true]},
+                            {id: 2, x: 5, y: 0, z: 0, restraint: [true, true, true, true, true, true]},
+                            {id: 3, x: 0, y: 0, z: 3, restraint: [false, false, false, false, false, false]},
+                            {id: 4, x: 5, y: 0, z: 3, restraint: [false, false, false, false, false, false]}
+                        ],
+                        elements: [
+                            {id: 1, node_i_id: 1, node_j_id: 3, section_id: 1, material_id: 1, element_type: 'Column'},
+                            {id: 2, node_i_id: 2, node_j_id: 4, section_id: 1, material_id: 1, element_type: 'Column'},
+                            {id: 3, node_i_id: 3, node_j_id: 4, section_id: 1, material_id: 1, element_type: 'Beam'}
+                        ],
+                        sections: [{id: 1, name: 'H300x150', A: 6000, Iy: 1.2e8, Iz: 6.7e7, J: 3.0e6}],
+                        materials: [{id: 1, name: 'Q355', E: 206000, fy: 355, density: 7850}]
+                    }
+                };
+            }
+
+            messageInput.value = JSON.stringify(demo, null, 2);
+        }
+
+        // 初始化状态
+        updateStatus('disconnected');
+        updateAutoReconnectButton();
+    </script>
+</body>
+</html>

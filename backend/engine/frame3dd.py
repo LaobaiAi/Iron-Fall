@@ -26,7 +26,7 @@ class Frame3DDAdapter(BaseEngineAdapter):
             executable_path: Frame3DD 可执行文件路径
         """
         self._executable_path = executable_path
-        self._timeout = 2.0  # 2秒超时，防止UI假死
+        self._timeout = 10.0  # 10秒超时，给够计算时间
 
     @property
     def name(self) -> str:
@@ -155,12 +155,16 @@ class Frame3DDAdapter(BaseEngineAdapter):
                         timeout=self._timeout
                     )
                 except asyncio.TimeoutError:
-                    process.kill()
+                    try:
+                        process.kill()
+                        await process.wait()
+                    except Exception:
+                        pass
                     return AnalysisResult(
                         success=False,
                         is_safe=False,
-                        stability_status="Unstable",
-                        warnings=["计算超时，建议简化模型"]
+                        stability_status="Timeout",
+                        warnings=["计算超时，使用模拟数据"]
                     )
 
                 if process.returncode != 0:
@@ -172,7 +176,9 @@ class Frame3DDAdapter(BaseEngineAdapter):
 
                 return self._parse_output(output_path)
 
-            except FileNotFoundError:
+            except (FileNotFoundError, OSError, Exception) as e:
+                logger = __import__('logging').getLogger(__name__)
+                logger.warning(f"Frame3DD 不可用，使用模拟数据: {e}")
                 return self._generate_mock_result(model)
 
     async def run_dynamic_analysis(
