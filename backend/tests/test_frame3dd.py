@@ -173,8 +173,8 @@ class TestFrame3DDAdapter:
         # 验证节点数据
         assert "0.000000" in content  # 坐标精度
         
-        # 验证构件数据
-        assert "645.16" in content  # 单位转换
+        # 验证构件数据 (截面积 mm² -> in²)
+        assert "15.5" in content or "15.50" in content  # 单位转换 10000mm² -> ~15.5in²
 
 
 class TestModels:
