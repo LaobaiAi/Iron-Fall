@@ -3,7 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Iron-Fall Web 客户端</title>
+    <title>Iron-Fall 智能钢结构拆除决策系统</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <style>
         * {
             margin: 0;
@@ -306,14 +308,212 @@
         .hidden {
             display: none;
         }
+        
+        /* 3D 可视化区域 */
+        .visualization-panel {
+            background: rgba(0, 0, 0, 0.6);
+            border-radius: 16px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            overflow: hidden;
+        }
+        
+        .viz-header {
+            padding: 16px 24px;
+            background: rgba(0, 0, 0, 0.3);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .viz-header h3 {
+            color: #00d9ff;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .viz-stats {
+            display: flex;
+            gap: 20px;
+            font-size: 13px;
+        }
+        
+        .viz-stat {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        
+        .viz-stat-label {
+            color: #888;
+        }
+        
+        .viz-stat-value {
+            color: #00ff88;
+            font-weight: 600;
+        }
+        
+        #canvas-container {
+            width: 100%;
+            height: 400px;
+            position: relative;
+        }
+        
+        #model-canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        
+        .viz-controls {
+            padding: 12px 24px;
+            background: rgba(0, 0, 0, 0.2);
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        
+        .viz-control-btn {
+            padding: 6px 16px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 6px;
+            color: #e0e0e0;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .viz-control-btn:hover {
+            background: rgba(0, 217, 255, 0.2);
+            border-color: #00d9ff;
+        }
+        
+        .viz-control-btn.active {
+            background: rgba(0, 217, 255, 0.3);
+            border-color: #00d9ff;
+        }
+        
+        /* 图例 */
+        .legend {
+            position: absolute;
+            bottom: 60px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            border-radius: 8px;
+            padding: 12px;
+            font-size: 11px;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 6px;
+        }
+        
+        .legend-color {
+            width: 16px;
+            height: 4px;
+            border-radius: 2px;
+        }
+        
+        .legend-color.column { background: #00d9ff; }
+        .legend-color.beam { background: #00ff88; }
+        .legend-color.brace { background: #ffaa00; }
+        .legend-color.removed { background: #ff4757; }
+        
+        /* 加载动画 */
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+        }
+        
+        .loading-spinner {
+            width: 50px;
+            height: 50px;
+            border: 3px solid rgba(0, 217, 255, 0.2);
+            border-top-color: #00d9ff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .loading-text {
+            margin-top: 16px;
+            color: #00d9ff;
+            font-size: 14px;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <header>
             <h1>Iron-Fall</h1>
-            <p class="subtitle">智能钢结构拆除决策系统 - Web 客户端</p>
+            <p class="subtitle">智能钢结构拆除决策系统 - 3D 可视化</p>
         </header>
+        
+        <!-- 3D 可视化面板 -->
+        <div class="visualization-panel">
+            <div class="viz-header">
+                <h3>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+                        <path d="M2 17l10 5 10-5"></path>
+                        <path d="M2 12l10 5 10-5"></path>
+                    </svg>
+                    钢结构 3D 模型
+                </h3>
+                <div class="viz-stats">
+                    <div class="viz-stat">
+                        <span class="viz-stat-label">节点:</span>
+                        <span class="viz-stat-value" id="nodeCount">0</span>
+                    </div>
+                    <div class="viz-stat">
+                        <span class="viz-stat-label">构件:</span>
+                        <span class="viz-stat-value" id="elementCount">0</span>
+                    </div>
+                    <div class="viz-stat">
+                        <span class="viz-stat-label">状态:</span>
+                        <span class="viz-stat-value" id="stabilityStatus">稳定</span>
+                    </div>
+                </div>
+            </div>
+            <div id="canvas-container">
+                <canvas id="model-canvas"></canvas>
+                <div class="legend">
+                    <div class="legend-item"><div class="legend-color column"></div>柱 (Column)</div>
+                    <div class="legend-item"><div class="legend-color beam"></div>梁 (Beam)</div>
+                    <div class="legend-item"><div class="legend-color brace"></div>支撑 (Brace)</div>
+                    <div class="legend-item"><div class="legend-color removed"></div>已拆除</div>
+                </div>
+                <div class="loading-overlay" id="loadingOverlay">
+                    <div class="loading-spinner"></div>
+                    <div class="loading-text">加载模型中...</div>
+                </div>
+            </div>
+            <div class="viz-controls">
+                <button class="viz-control-btn active" onclick="toggleWireframe()">线框模式</button>
+                <button class="viz-control-btn" onclick="resetCamera()">重置视角</button>
+                <button class="viz-control-btn" onclick="animateDemolition()">模拟拆除动画</button>
+                <button class="viz-control-btn" onclick="showGrid()">显示网格</button>
+                <button class="viz-control-btn" onclick="toggleNodes()">显示节点</button>
+            </div>
+        </div>
 
         <div class="connection-panel">
             <div class="connection-status">
@@ -516,7 +716,7 @@
             updateStatus('connecting');
             addLog('info', '正在连接到 ws://localhost:8000/ws/demolition...');
 
-            ws = new WebSocket('ws://localhost:8080/ws/demolition');
+            ws = new WebSocket('ws://localhost:8000/ws/demolition');
 
             ws.onopen = function() {
                 updateStatus('connected');
@@ -540,6 +740,11 @@
                     if (data.type === 'result' || data.type === 'validation_result' || data.type === 'pong') {
                         showResult(data.success !== false, data);
                         
+                        // 更新 3D 模型状态
+                        if (data.analysis) {
+                            updateModelState(data.analysis);
+                        }
+                        
                         // 迭代测试：收到结果后继续
                         if (isTesting && data.type === 'result') {
                             testIterations++;
@@ -552,6 +757,7 @@
                         }
                     } else if (data.type === 'error') {
                         showResult(false, data);
+                        updateModelState({ is_safe: false });
                         // 迭代测试：遇到错误也继续
                         if (isTesting) {
                             testIterations++;
@@ -846,6 +1052,337 @@
         // 初始化状态
         updateStatus('disconnected');
         updateAutoReconnectButton();
+        
+        // ==================== Three.js 3D 可视化 ====================
+        
+        let scene, camera, renderer, controls;
+        let structureGroup = null;
+        let nodeMeshes = [];
+        let elementMeshes = [];
+        let showWireframe = true;
+        let showNodeLabels = false;
+        let gridVisible = false;
+        let gridHelper = null;
+        let currentModel = null;
+        
+        function initThreeJS() {
+            const container = document.getElementById('canvas-container');
+            const canvas = document.getElementById('model-canvas');
+            
+            // 场景
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x1a1a2e);
+            
+            // 相机
+            const aspect = container.clientWidth / container.clientHeight;
+            camera = new THREE.PerspectiveCamera(60, aspect, 0.1, 1000);
+            camera.position.set(15, 12, 15);
+            
+            // 渲染器
+            renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            
+            // 轨道控制器
+            if (typeof THREE.OrbitControls !== 'undefined') {
+                controls = new THREE.OrbitControls(camera, renderer.domElement);
+                controls.enableDamping = true;
+                controls.dampingFactor = 0.05;
+                controls.target.set(5, 3, 5);
+            }
+            
+            // 光照
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+            scene.add(ambientLight);
+            
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(10, 20, 10);
+            scene.add(directionalLight);
+            
+            const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.3);
+            directionalLight2.position.set(-10, 10, -10);
+            scene.add(directionalLight2);
+            
+            // 轴辅助线
+            const axesHelper = new THREE.AxesHelper(10);
+            scene.add(axesHelper);
+            
+            // 隐藏加载动画
+            document.getElementById('loadingOverlay').style.display = 'none';
+            
+            // 动画循环
+            animate();
+            
+            // 窗口大小调整
+            window.addEventListener('resize', onWindowResize);
+            
+            // 加载初始模型
+            loadDemo('simple');
+        }
+        
+        function onWindowResize() {
+            const container = document.getElementById('canvas-container');
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        }
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            if (controls) controls.update();
+            renderer.render(scene, camera);
+        }
+        
+        function clearStructure() {
+            if (structureGroup) {
+                scene.remove(structureGroup);
+                structureGroup = null;
+            }
+            nodeMeshes = [];
+            elementMeshes = [];
+        }
+        
+        function createMaterial(type) {
+            const colors = {
+                'Column': 0x00d9ff,
+                'Beam': 0x00ff88,
+                'Brace': 0xffaa00,
+                'default': 0x00d9ff
+            };
+            
+            const color = colors[type] || colors.default;
+            
+            if (showWireframe) {
+                return new THREE.MeshBasicMaterial({ 
+                    color: color,
+                    wireframe: true 
+                });
+            } else {
+                return new THREE.MeshStandardMaterial({ 
+                    color: color,
+                    metalness: 0.7,
+                    roughness: 0.3
+                });
+            }
+        }
+        
+        function renderModel(modelData) {
+            clearStructure();
+            structureGroup = new THREE.Group();
+            
+            const nodes = modelData.nodes || [];
+            const elements = modelData.elements || [];
+            
+            // 创建节点映射
+            const nodeMap = {};
+            nodes.forEach(node => {
+                nodeMap[node.id] = node;
+            });
+            
+            // 更新统计
+            document.getElementById('nodeCount').textContent = nodes.length;
+            document.getElementById('elementCount').textContent = elements.length;
+            
+            // 创建节点球体
+            const nodeGeometry = new THREE.SphereGeometry(0.15, 16, 16);
+            nodes.forEach(node => {
+                const nodeMesh = new THREE.Mesh(
+                    nodeGeometry,
+                    new THREE.MeshBasicMaterial({ color: 0xff4757 })
+                );
+                nodeMesh.position.set(node.x, node.z, node.y);
+                structureGroup.add(nodeMesh);
+                nodeMeshes.push(nodeMesh);
+                
+                // 支座显示更大
+                if (node.restraint && node.restraint[0] && node.restraint[1] && node.restraint[2]) {
+                    nodeMesh.scale.set(2, 2, 2);
+                    nodeMesh.material.color.setHex(0x00ff88);
+                }
+            });
+            
+            // 创建构件
+            elements.forEach(element => {
+                const nodeI = nodeMap[element.node_i_id];
+                const nodeJ = nodeMap[element.node_j_id];
+                
+                if (!nodeI || !nodeJ) return;
+                
+                const start = new THREE.Vector3(nodeI.x, nodeI.z, nodeI.y);
+                const end = new THREE.Vector3(nodeJ.x, nodeJ.z, nodeJ.y);
+                
+                const direction = new THREE.Vector3().subVectors(end, start);
+                const length = direction.length();
+                
+                // 根据构件类型调整尺寸
+                const radiusMap = {
+                    'Column': 0.12,
+                    'Beam': 0.08,
+                    'Brace': 0.06,
+                    'default': 0.1
+                };
+                const radius = radiusMap[element.element_type] || radiusMap['default'];
+                
+                const geometry = new THREE.CylinderGeometry(radius, radius, length, 8);
+                const material = createMaterial(element.element_type);
+                const mesh = new THREE.Mesh(geometry, material);
+                
+                // 定位
+                const midpoint = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
+                mesh.position.copy(midpoint);
+                
+                // 旋转对齐方向
+                mesh.quaternion.setFromUnitVectors(
+                    new THREE.Vector3(0, 1, 0),
+                    direction.normalize()
+                );
+                
+                // 存储元数据
+                mesh.userData = { element };
+                
+                structureGroup.add(mesh);
+                elementMeshes.push(mesh);
+            });
+            
+            scene.add(structureGroup);
+            fitCameraToModel();
+        }
+        
+        function fitCameraToModel() {
+            if (!structureGroup) return;
+            
+            const box = new THREE.Box3().setFromObject(structureGroup);
+            const center = box.getCenter(new THREE.Vector3());
+            const size = box.getSize(new THREE.Vector3());
+            
+            const maxDim = Math.max(size.x, size.y, size.z);
+            const fov = camera.fov * (Math.PI / 180);
+            let cameraZ = Math.abs(maxDim / Math.sin(fov / 2)) * 1.5;
+            
+            camera.position.set(center.x + cameraZ * 0.6, center.y + cameraZ * 0.5, center.z + cameraZ * 0.6);
+            
+            if (controls) {
+                controls.target.copy(center);
+                controls.update();
+            }
+        }
+        
+        // 控制函数
+        function toggleWireframe() {
+            showWireframe = !showWireframe;
+            const btn = event.target;
+            btn.classList.toggle('active', showWireframe);
+            
+            elementMeshes.forEach(mesh => {
+                const type = mesh.userData.element?.element_type || 'default';
+                mesh.material = createMaterial(type);
+            });
+        }
+        
+        function resetCamera() {
+            fitCameraToModel();
+        }
+        
+        function toggleNodes() {
+            showNodeLabels = !showNodeLabels;
+            nodeMeshes.forEach(mesh => {
+                mesh.visible = showNodeLabels;
+            });
+        }
+        
+        function showGrid() {
+            if (gridHelper) {
+                gridVisible = !gridVisible;
+                gridHelper.visible = gridVisible;
+                event.target.classList.toggle('active', gridVisible);
+            } else {
+                gridHelper = new THREE.GridHelper(20, 20, 0x444444, 0x222222);
+                gridHelper.position.y = -0.01;
+                scene.add(gridHelper);
+                gridVisible = true;
+                event.target.classList.add('active');
+            }
+        }
+        
+        function animateDemolition() {
+            if (elementMeshes.length === 0) return;
+            
+            const targetMesh = elementMeshes[Math.floor(Math.random() * elementMeshes.length)];
+            const originalColor = targetMesh.material.color.getHex();
+            
+            // 闪烁效果
+            let blinkCount = 0;
+            const blinkInterval = setInterval(() => {
+                if (blinkCount < 6) {
+                    targetMesh.material.color.setHex(blinkCount % 2 === 0 ? 0xff4757 : originalColor);
+                    blinkCount++;
+                } else {
+                    clearInterval(blinkInterval);
+                    // 淡出
+                    fadeOut(targetMesh);
+                }
+            }, 150);
+        }
+        
+        function fadeOut(mesh) {
+            const fadeInterval = setInterval(() => {
+                mesh.material.opacity -= 0.1;
+                mesh.material.transparent = true;
+                if (mesh.material.opacity <= 0) {
+                    clearInterval(fadeInterval);
+                    mesh.visible = false;
+                    mesh.material.opacity = 1;
+                    document.getElementById('elementCount').textContent = 
+                        parseInt(document.getElementById('elementCount').textContent) - 1;
+                }
+            }, 50);
+        }
+        
+        // 重写 loadDemo 函数以更新 3D 模型
+        const originalLoadDemo = loadDemo;
+        loadDemo = function(type) {
+            originalLoadDemo(type);
+            
+            // 解析模型数据
+            try {
+                const msgData = JSON.parse(document.getElementById('messageInput').value);
+                if (msgData.model) {
+                    currentModel = msgData.model;
+                    renderModel(msgData.model);
+                    document.getElementById('stabilityStatus').textContent = '稳定';
+                    document.getElementById('stabilityStatus').style.color = '#00ff88';
+                }
+            } catch (e) {
+                console.error('解析模型数据失败:', e);
+            }
+        };
+        
+        // WebSocket 消息接收后更新模型
+        const originalWsOnMessage = ws ? ws.onmessage : null;
+        
+        // 页面加载完成后初始化 Three.js
+        window.addEventListener('DOMContentLoaded', () => {
+            setTimeout(initThreeJS, 100);
+        });
+        
+        // 更新模型状态
+        function updateModelState(analysisResult) {
+            if (!analysisResult) return;
+            
+            const isSafe = analysisResult.is_safe;
+            document.getElementById('stabilityStatus').textContent = isSafe ? '稳定' : '危险';
+            document.getElementById('stabilityStatus').style.color = isSafe ? '#00ff88' : '#ff4757';
+            
+            // 如果有拆除动画需求
+            if (analysisResult.demolished_elements) {
+                analysisResult.demolished_elements.forEach(id => {
+                    const mesh = elementMeshes.find(m => m.userData.element?.id === id);
+                    if (mesh) {
+                        fadeOut(mesh);
+                    }
+                });
+            }
+        }
     </script>
 </body>
 </html>
