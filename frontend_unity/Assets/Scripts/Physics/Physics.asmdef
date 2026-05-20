@@ -1,0 +1,12 @@
+/**
+ * Iron-Fall Physics Module
+ * 
+ * 包含钢框架结构的物理模拟组件
+ * 
+ * 组件说明:
+ * - SteelFrameModel:          钢框架数据结构，与后端 IFCS 对齐
+ * - DemolitionController:     核心拆除控制器
+ * - StructureBuilder:         结构构建器
+ * - StructuralElementPhysics: 单个构件的物理行为
+ * - PerformanceOptimizer:     AMD 4500U 性能优化
+ */
