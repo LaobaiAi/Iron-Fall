@@ -15,6 +15,7 @@ from core.models import (
 )
 from engine.frame3dd import Frame3DDAdapter
 from engine.opensees import OpenSeesPyAdapter
+from agent.agent import DemolitionAgent, SimpleDemolitionAgent
 
 # 日志配置
 logging.basicConfig(level=logging.INFO)
@@ -230,6 +231,108 @@ async def check_stability(
         "is_stable": is_stable,
         "max_displacement": max_disp,
         "threshold": threshold,
+        "latency_ms": (time.time() - start_time) * 1000
+    }
+
+
+# ============================================================================
+# AI 决策接口
+# ============================================================================
+
+@app.post("/api/v1/agent/plan")
+async def generate_demolition_plan(
+    model: StructureModel,
+    user_request: str = "请生成安全的拆除方案"
+) -> dict:
+    """AI 智能体生成拆除方案
+    
+    基于 ReAct 范式的 AI 决策引擎，自动分析结构并生成拆除方案。
+    
+    Args:
+        model: 结构模型
+        user_request: 用户请求描述
+        
+    Returns:
+        拆除方案
+    """
+    start_time = time.time()
+    
+    try:
+        agent = DemolitionAgent(model_name="gpt-4", temperature=0.1)
+        plan = await agent.generate_plan(model, user_request)
+    except ValueError:
+        agent = SimpleDemolitionAgent()
+        plan = await agent.generate_plan(model, user_request)
+    
+    return {
+        "success": True,
+        "plan": plan.model_dump(),
+        "latency_ms": (time.time() - start_time) * 1000
+    }
+
+
+@app.post("/api/v1/agent/validate")
+async def validate_demolition_plan(
+    model: StructureModel,
+    plan: DemolitionPlan
+) -> dict:
+    """验证拆除方案的安全性
+    
+    对方案中的每个步骤进行稳定性校验。
+    
+    Args:
+        model: 结构模型
+        plan: 拆除方案
+        
+    Returns:
+        验证结果
+    """
+    start_time = time.time()
+    
+    results = []
+    cumulative_model = StructureModel(
+        model_id=model.model_id,
+        name=model.name,
+        nodes=model.nodes,
+        elements=model.elements.copy(),
+        sections=model.sections,
+        materials=model.materials
+    )
+    
+    for action in plan.actions:
+        is_valid, error = await app.state.frame3dd.validate_model(cumulative_model)
+        
+        if not is_valid:
+            results.append({
+                "step": action.step,
+                "valid": False,
+                "error": error
+            })
+            continue
+        
+        is_stable, max_disp = await app.state.frame3dd.check_stability(
+            cumulative_model
+        )
+        
+        results.append({
+            "step": action.step,
+            "valid": is_stable,
+            "max_displacement": max_disp,
+            "elements_removed": action.target_element_ids
+        })
+        
+        remaining = [
+            e for e in cumulative_model.elements
+            if e.id not in action.target_element_ids
+        ]
+        cumulative_model.elements = remaining
+    
+    all_valid = all(r.get("valid", False) for r in results)
+    
+    return {
+        "success": all_valid,
+        "results": results,
+        "plan_risk_level": plan.risk_level,
         "latency_ms": (time.time() - start_time) * 1000
     }
 

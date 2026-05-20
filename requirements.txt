@@ -12,7 +12,14 @@ pydantic>=2.5.0
 # AI 框架
 langchain>=0.1.0
 langchain-openai>=0.0.5
-# langchain-core 已经包含在 langchain 中
+langchain-community>=0.0.10
+
+# RAG 知识库
+chromadb>=0.4.0
+langchain-chroma>=0.1.0
+
+# 文本处理
+langchain-text-splitters>=0.1.0
 
 # 数值计算
 numpy>=1.26.0
