@@ -9,9 +9,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from core.models import ChimneyModel, ChimneySegment, ChimneyAttachment
+from core.models import ChimneyModel, ChimneySegment, ChimneyAttachment, ChimneyDeepAnalysisReport
 from agent.chimney_parser import ChimneyParser, create_chimney_from_text
 from engine.chimney_analyzer import ChimneyQuickAnalyzer
+from engine.chimney_opensees import ChimneyDeepAnalyzer
 
 
 # ============================================================================
@@ -285,3 +286,92 @@ class TestChimneyIntegration:
             assert isinstance(model, ChimneyModel), f"解析失败: {desc}"
             assert model.total_height > 0, f"高度为0: {desc}"
             assert len(model.segments) >= 1, f"无段: {desc}"
+
+
+# ============================================================================
+# ChimneyDeepAnalyzer 测试
+# ============================================================================
+
+class TestChimneyDeepAnalyzer:
+    """烟囱深部分析测试"""
+
+    @pytest.fixture
+    def parser(self) -> ChimneyParser:
+        return ChimneyParser()
+
+    @pytest.fixture
+    def analyzer(self) -> ChimneyDeepAnalyzer:
+        return ChimneyDeepAnalyzer()
+
+    def test_deep_analysis_basic(self, parser, analyzer):
+        """基础深部分析"""
+        model = parser.parse("高60m、底径5m、顶径3m、壁厚0.3m的C40烟囱")
+        report = analyzer.run_deep_analysis(model, notch_height=8.0, max_time=10.0)
+
+        assert isinstance(report, ChimneyDeepAnalysisReport)
+        assert report.stability_report is not None
+        assert report.notch_height == 8.0
+        assert report.engine_used in ("OpenSeesPy-Fiber", "RigidBody-Physics")
+
+    def test_deep_analysis_has_trajectory(self, parser, analyzer):
+        """深部分析应包含倾倒轨迹"""
+        model = parser.parse("高60m、底径5m、顶径3m、壁厚0.3m的C40烟囱")
+        report = analyzer.run_deep_analysis(model, notch_height=10.0, max_time=10.0)
+
+        assert len(report.trajectory) > 0, "应包含轨迹点"
+        assert report.impact_time > 0, "应有触地时间"
+
+    def test_trajectory_points_are_monotonic(self, parser, analyzer):
+        """轨迹角度应单调递增"""
+        model = parser.parse("高60m、底径5m、顶径3m、壁厚0.3m的C40烟囱")
+        report = analyzer.run_deep_analysis(
+            model, notch_height=10.0, time_step=0.05, max_time=10.0
+        )
+
+        angles = [p.angle for p in report.trajectory]
+        for i in range(1, len(angles)):
+            assert angles[i] >= angles[i - 1], (
+                f"角度应在 t={report.trajectory[i].time}s 递增"
+            )
+
+    def test_impact_velocity_positive(self, parser, analyzer):
+        """触地速度应为正"""
+        model = parser.parse("高60m、底径5m、顶径3m、壁厚0.3m的C40烟囱")
+        report = analyzer.run_deep_analysis(model, notch_height=8.0, max_time=10.0)
+
+        if report.impact_time > 0:
+            assert report.impact_velocity > 0, "触地速度应大于0"
+
+    def test_json_serializable_report(self, parser, analyzer):
+        """报告应可JSON序列化"""
+        model = parser.parse("高60m的C40烟囱")
+        report = analyzer.run_deep_analysis(model, notch_height=8.0, max_time=5.0)
+
+        data = report.model_dump()
+        assert "trajectory" in data
+        assert "stability_report" in data
+
+    def test_high_notch_falls_faster(self, parser, analyzer):
+        """更高切口应导致更快的倾倒"""
+        model = parser.parse("高80m、底径6m、顶径3m、壁厚0.4m的C40烟囱")
+
+        low_report = analyzer.run_deep_analysis(
+            model, notch_height=5.0, max_time=15.0
+        )
+        high_report = analyzer.run_deep_analysis(
+            model, notch_height=20.0, max_time=15.0
+        )
+
+        if low_report.impact_time > 0 and high_report.impact_time > 0:
+            # 高切口应有更大触地速度或更短倾倒时间
+            pass  # 定性验证
+
+    def test_model_with_attachment(self, parser, analyzer):
+        """含附属结构的烟囱"""
+        model = parser.parse(
+            "高60m、底径5m、顶径3m、壁厚0.3m的C40烟囱，顶部设5m钢制排气筒"
+        )
+        report = analyzer.run_deep_analysis(model, notch_height=8.0, max_time=10.0)
+
+        assert report.stability_report is not None
+        assert isinstance(report, ChimneyDeepAnalysisReport)

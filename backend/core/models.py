@@ -291,3 +291,48 @@ class ChimneyStabilityReport(BaseModel):
         default=0.0, description="初始倾斜角 (度)"
     )
     warnings: list[str] = Field(default_factory=list)
+
+
+class ChimneyTrajectoryPoint(BaseModel):
+    """烟囱倾倒轨迹点
+
+    Attributes:
+        time: 时间 (s)
+        angle: 倾斜角 (度)
+        angular_velocity: 角速度 (rad/s)
+        com_x: 重心 X 坐标 (m)
+        com_z: 重心 Z 坐标 (m)
+        kinetic_energy: 动能 (J)
+    """
+    time: float
+    angle: float = Field(description="倾斜角 (度)")
+    angular_velocity: float = Field(description="角速度 (rad/s)")
+    com_x: float = Field(description="重心 X (m)")
+    com_z: float = Field(description="重心 Z (m)")
+    kinetic_energy: float = Field(default=0.0, description="动能 (J)")
+
+
+class ChimneyDeepAnalysisReport(BaseModel):
+    """烟囱深部分析报告 - 倾倒过程动力学分析
+
+    Attributes:
+        model_id: 模型 ID
+        notch_height: 切口高度 (m)
+        stability_report: 快速稳定性分析结果
+        trajectory: 倾倒轨迹点序列
+        impact_time: 触地时间 (s)
+        impact_velocity: 触地时顶点速度 (m/s)
+        impact_force: 估计撞击力 (kN)
+        fall_direction: 倾倒方向 (度)
+        engine_used: 使用的计算引擎
+    """
+    model_id: str
+    notch_height: float
+    stability_report: Optional[ChimneyStabilityReport] = None
+    trajectory: list[ChimneyTrajectoryPoint] = Field(default_factory=list)
+    impact_time: float = Field(default=0.0, description="触地时间 (s)")
+    impact_velocity: float = Field(default=0.0, description="顶点触地速度 (m/s)")
+    impact_force: float = Field(default=0.0, description="撞击力 (kN)")
+    fall_direction: float = Field(default=0.0, description="倾倒方向 (度)")
+    engine_used: str = Field(default="ChimneyDeepAnalyzer", description="引擎名称")
+    warnings: list[str] = Field(default_factory=list)

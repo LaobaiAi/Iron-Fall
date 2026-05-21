@@ -666,6 +666,57 @@ async def check_chimney_stability(model: ChimneyModel) -> dict:
     }
 
 
+@app.post("/api/v1/chimney/deep")
+async def run_chimney_deep_analysis(
+    model: ChimneyModel,
+    notch_height: Optional[float] = None,
+    time_step: float = 0.02,
+    max_time: float = 15.0,
+) -> dict:
+    """烟囱深部分析 - 倾倒过程动力学
+
+    执行烟囱切口后的倾倒全过程动力学分析。
+    - N 级 (OpenSeesPy 可用): FiberSection + dispBeamColumn，动力时程分析
+    - L-1 级 (降级): 基于转动动力学的刚体倾倒仿真
+
+    输出：倾倒轨迹、重心时程、触地速度、撞击力
+
+    Args:
+        model: 烟囱模型
+        notch_height: 切口高度 (m)，不指定则用模型默认值
+        time_step: 时间步长 (s)，默认 0.02s (50fps)
+        max_time: 最大模拟时间 (s)
+
+    Returns:
+        深部分析报告
+    """
+    start_time = time.time()
+
+    from engine.chimney_opensees import ChimneyDeepAnalyzer
+
+    analyzer = ChimneyDeepAnalyzer()
+    report = analyzer.run_deep_analysis(
+        model,
+        notch_height=notch_height,
+        time_step=time_step,
+        max_time=max_time,
+    )
+
+    return {
+        "success": True,
+        "report": report.model_dump(),
+        "stats": {
+            "engine": report.engine_used,
+            "trajectory_points": len(report.trajectory),
+            "impact_time": report.impact_time,
+            "impact_velocity": report.impact_velocity,
+            "impact_force_kn": report.impact_force,
+        },
+        "warnings": report.warnings,
+        "latency_ms": (time.time() - start_time) * 1000,
+    }
+
+
 # ============================================================================
 # WebSocket 实时接口
 # ============================================================================
