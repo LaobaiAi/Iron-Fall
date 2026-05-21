@@ -761,6 +761,61 @@ async def explain_demolition_decision(
 
 
 # ============================================================================
+# V3.0 强化学习拆除序列优化接口
+# ============================================================================
+
+@app.post("/api/v1/rl/compare")
+async def compare_rl_vs_baseline(
+    model: StructureModel,
+    train: bool = False,
+    timesteps: int = 5000,
+) -> dict:
+    """RL vs 传统方案对比
+
+    使用 PPO 训练拆除智能体，与规则方案同屏对比。
+    RL智能体在简单框架上训练收敛后，展示优化效果。
+
+    Args:
+        model: 结构模型
+        train: 是否现场训练 (较耗时，默认使用启发式)
+        timesteps: 训练步数 (仅 train=true 时有效)
+
+    Returns:
+        对比结果
+    """
+    start_time = time.time()
+
+    from engine.rl_agent import create_rl_comparison
+
+    result = create_rl_comparison(
+        model, train=train, timesteps=timesteps
+    )
+
+    return {
+        "success": True,
+        "trained": result.trained,
+        "rl_plan": {
+            "sequence": result.rl_sequence,
+            "steps": result.rl_steps,
+            "removed": result.rl_removed,
+            "reward": result.rl_reward,
+            "final_stability": result.rl_stability_end,
+        },
+        "baseline_plan": {
+            "sequence": result.baseline_sequence,
+            "steps": result.baseline_steps,
+            "removed": result.baseline_removed,
+        },
+        "comparison": {
+            "improvement": result.improvement,
+            "rl_steps": result.rl_steps,
+            "baseline_steps": result.baseline_steps,
+        },
+        "latency_ms": (time.time() - start_time) * 1000,
+    }
+
+
+# ============================================================================
 # WebSocket 实时接口
 # ============================================================================
 
