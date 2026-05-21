@@ -5,6 +5,64 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-05-21
+
+### Added
+
+#### V4.0 Phase 4: 智能体进化与系统集成 (Agent Evolution & System Integration)
+- **多智能体决策框架** (`agent/multi_agent.py`)
+  - `RuleBasedPlanningAgent` - 规划智能体: 拓扑排序的自上而下拆除序列
+  - `RuleBasedSafetyAgent` - 安全智能体: 规范审查 + 风险矩阵
+  - `RuleBasedEconomyAgent` - 经济智能体: 成本/工期估算
+  - `DebateOrchestrator` - 辩论协调器: 3轮辩论达成共识
+  - 支持规则模式（无需 LLM API）
+
+- **多智能体专用工具集** (`agent/tools_v4.py`)
+  - `get_structure_topology` - 结构拓扑分析
+  - `compute_dependency_graph` - 构件依赖图
+  - `evaluate_single_removal` - 单步拆除安全验算
+  - `check_regulation_compliance` - 规范合规审查
+  - `calculate_redundancy_score` - 冗余度计算
+  - `estimate_demolition_cost` - 成本估算
+  - `query_similar_case` - 相似案例检索
+  - `merge_demolition_plans` - 多方融合
+
+- **案例知识库** (`agent/case_library.py`)
+  - 10个典型拆除案例（含失效教训）
+  - 基于特征向量的相似案例检索（5维度加权匹配）
+  - 标签搜索、统计功能
+
+- **V4.0 数据模型** (`core/models.py`)
+  - `AgentRole` - 智能体角色枚举
+  - `AgentOpinion` - 智能体意见（含多维度评分）
+  - `DebateRecord` - 辩论记录
+  - `MultiAgentDecision` - 多智能体协同决策
+  - `DemolitionCase` / `CaseMatchResult` - 案例模型
+
+- **V4.0 API 端点** (`api/main.py`)
+  - `POST /api/v1/multi-agent/decide` - 多智能体协同决策
+  - `POST /api/v1/multi-agent/debate` - 辩论详情
+  - `GET /api/v1/cases` - 全部案例
+  - `GET /api/v1/cases/{case_id}` - 案例详情
+  - `POST /api/v1/cases/search` - 基于模型检索案例
+  - `GET /api/v1/cases/tag/{tag}` - 按标签检索
+  - `POST /api/v1/integration/test` - 全系统集成测试
+
+- **测试覆盖**
+  - 32个单元测试全部通过
+  - 覆盖规划/安全/经济智能体 + 辩论协调器 + 案例库 + 数据模型 + E2E集成
+
+### Technical Specifications
+
+| 指标 | 目标值 | 状态 |
+|------|--------|------|
+| 多智能体框架运行 | 3个角色 | 已达成 |
+| 案例库规模 | 10个案例 | 已达成 |
+| 端到端决策耗时 | < 3s | 已达成 (1ms) |
+| 单元测试通过 | 32/32 | 已达成 |
+
+---
+
 ## [1.0.0] - 2026-05-21
 
 ### Added
