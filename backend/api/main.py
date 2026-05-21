@@ -878,61 +878,6 @@ async def visualize_force_timeline(
 
 
 # ============================================================================
-# V3.0 工程报告生成接口
-# ============================================================================
-
-@app.post("/api/v1/report/generate")
-async def generate_engineering_report(
-    model: StructureModel,
-    analysis_result: Optional[AnalysisResult] = None,
-    plan: Optional[DemolitionPlan] = None,
-    format: str = "html",
-    chimney_model: Optional[ChimneyModel] = None,
-    chimney_report: Optional[ChimneyStabilityReport] = None,
-) -> dict:
-    """生成工程报告
-
-    整合结构模型、力学分析、拆除方案等数据，
-    自动生成格式规范的专业工程计算书。
-
-    Args:
-        model: 结构模型
-        analysis_result: 力学分析结果
-        plan: 拆除方案
-        format: 输出格式 (html | markdown)
-        chimney_model: 烟囱模型 (可选，含烟囱专项）
-        chimney_report: 烟囱稳定性报告 (可选）
-
-    Returns:
-        报告内容
-    """
-    start_time = time.time()
-
-    from engine.report_generator import ReportGenerator
-
-    gen = ReportGenerator()
-
-    if format == "markdown":
-        content = gen.generate_markdown(
-            model, analysis_result, plan,
-            chimney_model, chimney_report
-        )
-    else:
-        content = gen.generate_html(
-            model, analysis_result, plan,
-            chimney_model, chimney_report
-        )
-
-    return {
-        "success": True,
-        "format": format,
-        "content": content,
-        "size_bytes": len(content.encode("utf-8")),
-        "latency_ms": (time.time() - start_time) * 1000,
-    }
-
-
-# ============================================================================
 # WebSocket 实时接口
 # ============================================================================
 
@@ -983,61 +928,6 @@ async def compare_rl_vs_baseline(
             "rl_steps": result.rl_steps,
             "baseline_steps": result.baseline_steps,
         },
-        "latency_ms": (time.time() - start_time) * 1000,
-    }
-
-
-# ============================================================================
-# V3.0 工程报告生成接口
-# ============================================================================
-
-@app.post("/api/v1/report/generate")
-async def generate_engineering_report(
-    model: StructureModel,
-    analysis_result: Optional[AnalysisResult] = None,
-    plan: Optional[DemolitionPlan] = None,
-    format: str = "html",
-    chimney_model: Optional[ChimneyModel] = None,
-    chimney_report: Optional[ChimneyStabilityReport] = None,
-) -> dict:
-    """生成工程报告
-
-    整合结构模型、力学分析、拆除方案等数据，
-    自动生成格式规范的专业工程计算书。
-
-    Args:
-        model: 结构模型
-        analysis_result: 力学分析结果
-        plan: 拆除方案
-        format: 输出格式 (html | markdown)
-        chimney_model: 烟囱模型 (可选，含烟囱专项）
-        chimney_report: 烟囱稳定性报告 (可选）
-
-    Returns:
-        报告内容
-    """
-    start_time = time.time()
-
-    from engine.report_generator import ReportGenerator
-
-    gen = ReportGenerator()
-
-    if format == "markdown":
-        content = gen.generate_markdown(
-            model, analysis_result, plan,
-            chimney_model, chimney_report
-        )
-    else:
-        content = gen.generate_html(
-            model, analysis_result, plan,
-            chimney_model, chimney_report
-        )
-
-    return {
-        "success": True,
-        "format": format,
-        "content": content,
-        "size_bytes": len(content.encode("utf-8")),
         "latency_ms": (time.time() - start_time) * 1000,
     }
 
