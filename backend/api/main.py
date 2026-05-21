@@ -1180,6 +1180,317 @@ async def websocket_demolition(websocket: WebSocket):
 
 
 # ============================================================================
+# V4.0 多智能体决策接口
+# ============================================================================
+
+@app.post("/api/v1/multi-agent/decide")
+async def multi_agent_decision(
+    model: StructureModel,
+    user_prefs: Optional[dict] = None,
+    use_llm: bool = False,
+) -> dict:
+    """多智能体协同决策
+
+    规划/安全/经济三个智能体通过辩论机制协作，
+    产出平衡多方诉求的最优拆除方案。
+
+    Args:
+        model: 结构模型
+        user_prefs: 用户偏好权重，如 {"safety": 0.7, "speed": 0.2, "cost": 0.1}
+        use_llm: 是否启用 LLM 增强
+
+    Returns:
+        MultiAgentDecision 完整决策结果
+    """
+    start_time = time.time()
+
+    from agent.multi_agent import create_orchestrator
+
+    orchestrator = create_orchestrator(use_llm=use_llm)
+    decision = orchestrator.decide(model, user_prefs)
+
+    return {
+        "success": True,
+        "decision": decision.model_dump(),
+        "stats": {
+            "agent_count": len(decision.agent_opinions),
+            "debate_rounds": len(decision.debate_history),
+            "consensus_score": decision.consensus_score,
+            "final_plan_steps": (
+                len(decision.final_plan.actions)
+                if decision.final_plan else 0
+            ),
+            "risk_level": (
+                decision.final_plan.risk_level
+                if decision.final_plan else "Unknown"
+            ),
+            "cost_estimate_wan": decision.cost_estimate,
+            "duration_days": decision.duration_estimate,
+        },
+        "latency_ms": (time.time() - start_time) * 1000,
+    }
+
+
+@app.post("/api/v1/multi-agent/debate")
+async def debate_detail(
+    model: StructureModel,
+    topic: Optional[str] = None,
+) -> dict:
+    """获取多智能体辩论详情
+
+    返回完整的辩论记录，包括每轮各智能体的意见和分歧点。
+
+    Args:
+        model: 结构模型
+        topic: 特定议题（可选）
+
+    Returns:
+        辩论详情
+    """
+    start_time = time.time()
+
+    from agent.multi_agent import create_orchestrator
+
+    orchestrator = create_orchestrator()
+    decision = orchestrator.decide(model)
+
+    return {
+        "success": True,
+        "decision_id": decision.decision_id,
+        "model_id": decision.model_id,
+        "rounds": [
+            {
+                "round": r.round,
+                "topic": r.topic,
+                "opinion_count": len(r.opinions),
+                "consensus": r.consensus_reached,
+            }
+            for r in decision.debate_history
+        ],
+        "divergent_points": decision.divergent_points,
+        "warnings": decision.warnings,
+        "latency_ms": (time.time() - start_time) * 1000,
+    }
+
+
+# ============================================================================
+# V4.0 案例库接口
+# ============================================================================
+
+@app.get("/api/v1/cases/stats")
+async def get_case_library_stats() -> dict:
+    """获取案例库统计信息"""
+    from agent.case_library import get_case_library
+
+    lib = get_case_library()
+    stats = lib.get_stats()
+
+    return {
+        "success": True,
+        "stats": stats.model_dump(),
+    }
+
+
+@app.get("/api/v1/cases")
+async def list_all_cases() -> dict:
+    """获取全部拆除案例"""
+    from agent.case_library import get_case_library
+
+    lib = get_case_library()
+    cases = lib.get_all_cases()
+
+    return {
+        "success": True,
+        "total": len(cases),
+        "cases": [
+            {
+                "case_id": c.case_id,
+                "project_name": c.project_name,
+                "structure_type": c.structure_type,
+                "floors": c.floors,
+                "method": c.demolition_method,
+                "cost_wan": c.cost_wan_yuan,
+                "duration_days": c.duration_days,
+                "success": c.success,
+                "tags": c.tags,
+            }
+            for c in cases
+        ],
+    }
+
+
+@app.get("/api/v1/cases/{case_id}")
+async def get_case_detail(case_id: str) -> dict:
+    """获取单个案例详情"""
+    from agent.case_library import get_case_library
+
+    lib = get_case_library()
+    case = lib.get_case_by_id(case_id)
+
+    if not case:
+        raise HTTPException(status_code=404, detail=f"案例 {case_id} 不存在")
+
+    return {
+        "success": True,
+        "case": case.model_dump(),
+    }
+
+
+@app.post("/api/v1/cases/search")
+async def search_cases(
+    model: StructureModel,
+    top_k: int = 3,
+) -> dict:
+    """基于当前结构模型检索相似案例
+
+    Args:
+        model: 当前结构模型
+        top_k: 返回案例数量
+    """
+    from agent.case_library import get_case_library
+
+    lib = get_case_library()
+    matches = lib.search_similar(model, top_k=top_k)
+
+    return {
+        "success": True,
+        "model_id": model.model_id,
+        "matches": [
+            {
+                "case_id": m.case.case_id,
+                "project_name": m.case.project_name,
+                "similarity": m.similarity_score,
+                "relevance": m.relevance_reason,
+                "structure_type": m.case.structure_type,
+                "floors": m.case.floors,
+                "demolition_method": m.case.demolition_method,
+                "duration_days": m.case.duration_days,
+                "cost_wan_yuan": m.case.cost_wan_yuan,
+                "success": m.case.success,
+                "key_lessons": m.case.key_lessons,
+            }
+            for m in matches
+        ],
+    }
+
+
+@app.get("/api/v1/cases/tag/{tag}")
+async def search_cases_by_tag(tag: str) -> dict:
+    """按标签检索案例"""
+    from agent.case_library import get_case_library
+
+    lib = get_case_library()
+    cases = lib.search_by_tag(tag)
+
+    return {
+        "success": True,
+        "tag": tag,
+        "total": len(cases),
+        "cases": [
+            {
+                "case_id": c.case_id,
+                "project_name": c.project_name,
+                "structure_type": c.structure_type,
+                "tags": c.tags,
+            }
+            for c in cases
+        ],
+    }
+
+
+# ============================================================================
+# V4.0 全系统集成测试接口
+# ============================================================================
+
+@app.post("/api/v1/integration/test")
+async def run_integration_test(
+    scenario: str = "standard_3f_steel",
+) -> dict:
+    """V4.0 全系统集成测试
+
+    端到端测试：自然语言建模 → 多智能体决策 → 方案验证 → 案例匹配
+
+    Args:
+        scenario: 测试场景 ("standard_3f_steel" | "braced_frame" | "tall")
+
+    Returns:
+        完整测试报告
+    """
+    start_time = time.time()
+
+    from agent.parser import StructureParser
+    from agent.multi_agent import create_orchestrator
+    from agent.case_library import get_case_library
+
+    # Step 1: 自然语言建模
+    scenarios = {
+        "standard_3f_steel": "建一个3层钢框架，跨度6m，层高3.6m，H400x200，Q355",
+        "braced_frame": "建一个带X型斜撑的五层钢框架，首层高4m，标准层高3.4m，Q355",
+        "tall": "建一个6层钢框架，跨度8m，层高3.5m，H500x250，Q355",
+    }
+
+    parser = StructureParser()
+    model = parser.parse(
+        scenarios.get(scenario, scenarios["standard_3f_steel"]),
+        f"v4_test_{scenario}",
+    )
+
+    # Step 2: 多智能体决策
+    orchestrator = create_orchestrator()
+    decision = orchestrator.decide(model)
+
+    # Step 3: 方案验证
+    validation_results = []
+    if decision.final_plan and decision.final_plan.actions:
+        validation_results.append({
+            "total_steps": len(decision.final_plan.actions),
+            "risk_level": decision.final_plan.risk_level,
+            "valid": len(decision.final_plan.actions) > 0,
+        })
+
+    # Step 4: 案例匹配
+    lib = get_case_library()
+    matches = lib.search_similar(model, top_k=3)
+
+    total_ms = (time.time() - start_time) * 1000
+
+    return {
+        "success": True,
+        "scenario": scenario,
+        "model": {
+            "nodes": len(model.nodes),
+            "elements": len(model.elements),
+            "columns": sum(1 for e in model.elements if e.element_type == "Column"),
+            "beams": sum(1 for e in model.elements if e.element_type == "Beam"),
+            "braces": sum(1 for e in model.elements if e.element_type == "Brace"),
+        },
+        "multi_agent": {
+            "consensus_score": decision.consensus_score,
+            "agent_count": len(decision.agent_opinions),
+            "debate_rounds": len(decision.debate_history),
+            "final_plan_steps": (
+                len(decision.final_plan.actions)
+                if decision.final_plan else 0
+            ),
+            "risk_level": (
+                decision.final_plan.risk_level
+                if decision.final_plan else "N/A"
+            ),
+            "cost_estimate_wan": decision.cost_estimate,
+            "duration_days": decision.duration_estimate,
+            "warnings": decision.warnings,
+            "divergent_points": decision.divergent_points,
+        },
+        "case_matches": {
+            "total_matches": len(matches),
+            "top_match": matches[0].case.project_name if matches else "N/A",
+            "top_similarity": round(matches[0].similarity_score, 3) if matches else 0,
+        },
+        "total_latency_ms": total_ms,
+    }
+
+
+# ============================================================================
 # 根路径
 # ============================================================================
 

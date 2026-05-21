@@ -394,3 +394,152 @@ class XAIReport(BaseModel):
     element_details: list[ElementXAIInfo] = Field(default_factory=list)
     recommended_sequence: list[int] = Field(default_factory=list)
     summary: str = Field(default="", description="决策摘要")
+
+
+# =============================================================================
+# V4.0 多智能体决策模型
+# =============================================================================
+
+class AgentRole(str, Enum):
+    """智能体角色"""
+    PLANNING = "planning"      # 规划智能体：最优拆除序列
+    SAFETY = "safety"          # 安全智能体：风险评估与规范
+    ECONOMY = "economy"        # 经济智能体：成本与工期
+
+
+class AgentOpinion(BaseModel):
+    """单个智能体的决策意见
+
+    Attributes:
+        agent_role: 智能体角色
+        plan: 该智能体建议的拆除方案
+        scores: 该智能体对方案各项指标的打分
+        reasoning: 决策理由
+        confidence: 置信度 (0-1)
+    """
+    agent_role: AgentRole
+    plan: Optional[DemolitionPlan] = None
+    scores: dict[str, float] = Field(
+        default_factory=lambda: {
+            "safety": 0.0,
+            "efficiency": 0.0,
+            "cost": 0.0,
+            "overall": 0.0,
+        },
+        description="多维度评分"
+    )
+    reasoning: str = Field(default="", description="决策理由")
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0, description="置信度")
+
+
+class DebateRecord(BaseModel):
+    """辩论记录 - 一轮辩论的完整记录
+
+    Attributes:
+        round: 轮次
+        topic: 辩论议题
+        opinions: 各方意见
+        consensus_reached: 是否达成共识
+        winner_role: 胜出角色（如达成共识）
+    """
+    round: int
+    topic: str = ""
+    opinions: list[AgentOpinion] = Field(default_factory=list)
+    consensus_reached: bool = False
+    winner_role: Optional[AgentRole] = None
+
+
+class MultiAgentDecision(BaseModel):
+    """多智能体协同决策结果
+
+    Attributes:
+        decision_id: 决策唯一标识
+        model_id: 关联的结构模型 ID
+        final_plan: 最终拆除方案（融合多方意见）
+        agent_opinions: 各智能体的独立意见
+        debate_history: 辩论过程记录
+        consensus_score: 共识度 (0-1, 越高越一致)
+        risk_assessment: 综合风险评估
+        cost_estimate: 估算成本 (万元)
+        duration_estimate: 估算工期 (天)
+        warnings: 各方一致警告
+        divergent_points: 仍存在的分歧点
+    """
+    decision_id: str
+    model_id: str = ""
+    final_plan: Optional[DemolitionPlan] = None
+    agent_opinions: list[AgentOpinion] = Field(default_factory=list)
+    debate_history: list[DebateRecord] = Field(default_factory=list)
+    consensus_score: float = Field(default=0.0, description="共识度 0-1")
+    risk_assessment: str = Field(default="", description="综合风险评估")
+    cost_estimate: float = Field(default=0.0, description="估算成本(万元)")
+    duration_estimate: int = Field(default=0, description="估算工期(天)")
+    warnings: list[str] = Field(default_factory=list)
+    divergent_points: list[str] = Field(default_factory=list)
+
+
+# =============================================================================
+# V4.0 案例库模型
+# =============================================================================
+
+class DemolitionCase(BaseModel):
+    """历史拆除案例
+
+    Attributes:
+        case_id: 案例唯一标识
+        project_name: 项目名称
+        location: 地点
+        year: 年份
+        structure_type: 结构类型描述
+        height: 高度 (m)
+        floors: 层数
+        material: 主要材料
+        demolition_method: 拆除方法
+        duration_days: 工期 (天)
+        cost_wan_yuan: 成本 (万元)
+        success: 是否成功
+        key_lessons: 关键经验教训
+        tags: 标签（用于相似检索）
+        description: 详细描述
+    """
+    case_id: str
+    project_name: str
+    location: str = ""
+    year: int = 2020
+    structure_type: str = ""
+    height: float = 0.0
+    floors: int = 0
+    material: str = ""
+    demolition_method: str = ""
+    duration_days: int = 0
+    cost_wan_yuan: float = 0.0
+    success: bool = True
+    key_lessons: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
+    description: str = ""
+
+
+class CaseMatchResult(BaseModel):
+    """案例匹配结果
+
+    Attributes:
+        case: 匹配到的案例
+        similarity_score: 相似度 (0-1)
+        relevance_reason: 匹配理由
+    """
+    case: DemolitionCase
+    similarity_score: float = Field(description="相似度 0-1")
+    relevance_reason: str = ""
+
+
+class CaseLibraryStats(BaseModel):
+    """案例库统计
+
+    Attributes:
+        total_cases: 总案例数
+        tags: 标签分布
+        success_rate: 成功率
+    """
+    total_cases: int = 0
+    tags: dict[str, int] = Field(default_factory=dict)
+    success_rate: float = 0.0
