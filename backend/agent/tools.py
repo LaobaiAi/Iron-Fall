@@ -33,11 +33,11 @@ def check_structure_stability(model: dict) -> dict:
     structure_model = StructureModel(**model)
     
     import asyncio
-    result = asyncio.run(adapter.check_stability(structure_model))
+    result = asyncio.run(adapter.run_static_analysis(structure_model))
     
     return {
-        "is_stable": result[0],
-        "max_displacement": result[1],
+        "is_stable": result.is_safe,
+        "max_displacement": result.max_displacement,
         "stability_status": result.stability_status,
         "warnings": result.warnings
     }

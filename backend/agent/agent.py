@@ -249,6 +249,15 @@ class SimpleDemolitionAgent:
         beams = [e for e in model.elements if e.element_type == ElementType.BEAM]
         columns = [e for e in model.elements if e.element_type == ElementType.COLUMN]
         
+        # 空模型快捷返回
+        if not model.nodes or not model.elements:
+            return DemolitionPlan(
+                plan_id=f"simple_plan_{self._plan_counter:03d}",
+                description="空模型，无拆除方案",
+                actions=[],
+                risk_level="Low"
+            )
+        
         actions = []
         step = 1
         

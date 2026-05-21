@@ -152,7 +152,7 @@ class ReportGenerator:
 
     def generate_html(
         self,
-        model: StructureModel,
+        model: Optional[StructureModel] = None,
         analysis_result: Optional[AnalysisResult] = None,
         plan: Optional[DemolitionPlan] = None,
         chimney_model: Optional[ChimneyModel] = None,
@@ -187,7 +187,7 @@ class ReportGenerator:
 
     def generate_markdown(
         self,
-        model: StructureModel,
+        model: Optional[StructureModel] = None,
         analysis_result: Optional[AnalysisResult] = None,
         plan: Optional[DemolitionPlan] = None,
         chimney_model: Optional[ChimneyModel] = None,
@@ -247,7 +247,7 @@ class ReportGenerator:
 
     def _build_report_data(
         self,
-        model: StructureModel,
+        model: Optional[StructureModel],
         analysis_result: Optional[AnalysisResult],
         plan: Optional[DemolitionPlan],
         chimney_model: Optional[ChimneyModel],
@@ -256,11 +256,19 @@ class ReportGenerator:
         """构建报告数据"""
         data = ReportData()
         data.timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-        data.model_name = model.name
-        data.total_elements = len(model.elements)
-        data.total_nodes = len(model.nodes)
-        data.materials = ", ".join(m.name for m in model.materials)
-        data.sections = ", ".join(s.name for s in model.sections)
+
+        # 模型数据（允许为 None）
+        if model is not None:
+            data.model_name = model.name
+            data.total_elements = len(model.elements)
+            data.total_nodes = len(model.nodes)
+            data.materials = ", ".join(m.name for m in model.materials)
+            data.sections = ", ".join(s.name for s in model.sections)
+        else:
+            data.model_name = "（无模型数据）"
+            data.model_id = ""
+            data.materials = "N/A"
+            data.sections = "N/A"
 
         # 结构类型判断
         if chimney_model:
@@ -270,10 +278,12 @@ class ReportGenerator:
                 else "C40"
             )
             data.structure_type = f"钢筋混凝土烟囱 ({grade})"
-        elif any(e.element_type.value == "Brace" for e in model.elements):
+        elif model is not None and any(e.element_type.value == "Brace" for e in model.elements):
             data.structure_type = "钢框架-支撑结构"
-        else:
+        elif model is not None:
             data.structure_type = "钢框架结构"
+        else:
+            data.structure_type = "未定义"
 
         # 分析结果
         if analysis_result:
