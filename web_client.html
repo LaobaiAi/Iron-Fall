@@ -395,6 +395,25 @@
             background: rgba(0, 217, 255, 0.3);
             border-color: #00d9ff;
         }
+
+        /* V3.0 力场热力图例 */
+        .force-legend {
+            padding: 12px 24px;
+            background: rgba(0, 0, 0, 0.2);
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            flex-wrap: wrap;
+            font-size: 12px;
+        }
+        .force-legend.hidden { display: none; }
+        .legend-gradient {
+            width: 200px;
+            height: 12px;
+            border-radius: 6px;
+            background: linear-gradient(to right, #2196F3, #4CAF50, #FFEB3B, #FF9800, #F44336);
+        }
+        .legend-label { color: #888; }
         
         /* 图例 */
         .legend {
@@ -512,6 +531,16 @@
                 <button class="viz-control-btn" onclick="animateDemolition()">模拟拆除动画</button>
                 <button class="viz-control-btn" onclick="showGrid()">显示网格</button>
                 <button class="viz-control-btn" onclick="toggleNodes()">显示节点</button>
+                <button class="viz-control-btn" id="btnForceField" onclick="toggleForceField()">力场热力图</button>
+            </div>
+            <div class="force-legend hidden" id="forceLegend">
+                <span class="legend-label">应力热力:</span>
+                <div class="legend-gradient"></div>
+                <span class="legend-label" style="color:#2196F3">0%</span>
+                <span class="legend-label" style="color:#4CAF50">25%</span>
+                <span class="legend-label" style="color:#FFEB3B">50%</span>
+                <span class="legend-label" style="color:#FF9800">75%</span>
+                <span class="legend-label" style="color:#F44336">100%</span>
             </div>
         </div>
 
@@ -1459,6 +1488,87 @@
             }, 150);
         }
         
+        // ==============================================================
+        // V3.0 力场热力图
+        // ==============================================================
+        let forceFieldActive = false;
+        let forceFieldData = null;
+        let originalColors = [];
+
+        async function toggleForceField() {
+            const btn = document.getElementById('btnForceField');
+            const legend = document.getElementById('forceLegend');
+
+            if (forceFieldActive) {
+                // 关闭力场，恢复原色
+                forceFieldActive = false;
+                btn.classList.remove('active');
+                legend.classList.add('hidden');
+                restoreOriginalColors();
+                return;
+            }
+
+            // 需要先有模型
+            if (!currentModel || !currentModel.elements) {
+                addLog('info', '请先加载结构模型');
+                return;
+            }
+
+            btn.textContent = '加载中...';
+
+            try {
+                const resp = await fetch(`${API_BASE}/api/v1/visualization/force-field`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(currentModel),
+                });
+
+                const data = await resp.json();
+                if (data.success) {
+                    forceFieldData = data.frame;
+                    forceFieldActive = true;
+                    btn.textContent = '力场热力图 ✓';
+                    btn.classList.add('active');
+                    legend.classList.remove('hidden');
+                    applyForceFieldColors(forceFieldData.elements);
+                    addLog('received', `力场热力图: max应力比=${data.frame.max_stress_ratio}`);
+                } else {
+                    btn.textContent = '力场热力图';
+                    addLog('error', '力场数据加载失败');
+                }
+            } catch (e) {
+                btn.textContent = '力场热力图';
+                addLog('error', '力场请求失败: ' + e.message);
+            }
+        }
+
+        function applyForceFieldColors(elements) {
+            // 保存当前颜色
+            originalColors = elementMeshes.map(m => ({
+                mesh: m,
+                color: m.material.color.getHex(),
+            }));
+
+            const colorCache = {};
+            (elements || []).forEach(el => {
+                colorCache[el.element_id] = el.color;
+            });
+
+            elementMeshes.forEach(m => {
+                const eid = m.userData?.elementId;
+                if (eid && colorCache[eid]) {
+                    m.material.color.set(colorCache[eid]);
+                }
+            });
+        }
+
+        function restoreOriginalColors() {
+            originalColors.forEach(entry => {
+                entry.mesh.material.color.setHex(entry.color);
+            });
+            originalColors = [];
+        }
+
         function fadeOut(mesh) {
             const fadeInterval = setInterval(() => {
                 mesh.material.opacity -= 0.1;

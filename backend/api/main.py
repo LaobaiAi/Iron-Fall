@@ -761,7 +761,124 @@ async def explain_demolition_decision(
 
 
 # ============================================================================
-# V3.0 强化学习拆除序列优化接口
+# V3.0 力学状态实时可视化接口
+# ============================================================================
+
+@app.post("/api/v1/visualization/force-field")
+async def visualize_force_field(
+    model: StructureModel,
+    analysis_result: Optional[AnalysisResult] = None,
+) -> dict:
+    """生成力场可视化数据
+
+    将构件内力映射为颜色热力图 (蓝→绿→黄→红)。
+    前端可直接用于实时渲染。
+
+    Args:
+        model: 结构模型
+        analysis_result: 力学分析结果 (可选)
+
+    Returns:
+        力场颜色映射数据
+    """
+    start_time = time.time()
+
+    from engine.force_visualizer import ForceVisualizer
+
+    viz = ForceVisualizer()
+    frame = viz.visualize(model, analysis_result)
+
+    return {
+        "success": True,
+        "frame": {
+            "description": frame.description,
+            "max_stress_ratio": frame.max_stress_ratio,
+            "avg_stress_ratio": frame.avg_stress_ratio,
+            "stable": frame.stable,
+            "elements": [
+                {
+                    "element_id": e.element_id,
+                    "element_type": e.element_type,
+                    "stress_ratio": e.stress_ratio,
+                    "axial_force": e.axial_force,
+                    "bending_moment": e.bending_moment,
+                    "color": e.color_hex,
+                    "alpha": e.alpha,
+                }
+                for e in frame.elements
+            ],
+        },
+        "legend": {
+            "levels": [
+                {"label": "安全 (0-20%)", "color": "#2196F3"},
+                {"label": "低应力 (20-40%)", "color": "#4CAF50"},
+                {"label": "中等 (40-60%)", "color": "#FFEB3B"},
+                {"label": "高应力 (60-80%)", "color": "#FF9800"},
+                {"label": "危险 (80-100%)", "color": "#F44336"},
+            ]
+        },
+        "latency_ms": (time.time() - start_time) * 1000,
+    }
+
+
+@app.post("/api/v1/visualization/timeline")
+async def visualize_force_timeline(
+    model: StructureModel,
+    actions: list[DemolitionAction],
+) -> dict:
+    """生成拆除过程力场变化时间线
+
+    返回逐步拆除过程中内力重分布的逐帧动画数据。
+
+    Args:
+        model: 初始结构模型
+        actions: 拆除动作序列
+
+    Returns:
+        力场变化时间线
+    """
+    start_time = time.time()
+
+    from engine.force_visualizer import ForceVisualizer
+
+    viz = ForceVisualizer()
+    timeline = viz.visualize_timeline(model, actions)
+
+    return {
+        "success": True,
+        "timeline": {
+            "model_id": timeline.model_id,
+            "model_name": timeline.model_name,
+            "total_frames": timeline.total_frames,
+            "frames": [
+                {
+                    "frame_index": f.frame_index,
+                    "action_step": f.action_step,
+                    "description": f.description,
+                    "max_stress_ratio": f.max_stress_ratio,
+                    "avg_stress_ratio": f.avg_stress_ratio,
+                    "stable": f.stable,
+                    "elements": [
+                        {
+                            "element_id": e.element_id,
+                            "element_type": e.element_type,
+                            "stress_ratio": e.stress_ratio,
+                            "color": e.color_hex,
+                            "alpha": e.alpha,
+                        }
+                        for e in f.elements
+                    ],
+                }
+                for f in timeline.frames
+            ],
+        },
+        "legend": timeline.legend,
+        "latency_ms": (time.time() - start_time) * 1000,
+    }
+
+
+# ============================================================================
+# WebSocket 实时接口
 # ============================================================================
 
 @app.post("/api/v1/rl/compare")
