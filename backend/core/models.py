@@ -336,3 +336,61 @@ class ChimneyDeepAnalysisReport(BaseModel):
     fall_direction: float = Field(default=0.0, description="倾倒方向 (度)")
     engine_used: str = Field(default="ChimneyDeepAnalyzer", description="引擎名称")
     warnings: list[str] = Field(default_factory=list)
+
+
+# =============================================================================
+# V3.0 可解释AI (XAI) 模型
+# =============================================================================
+
+class ElementXAIInfo(BaseModel):
+    """单个构件的XAI解释信息
+
+    Attributes:
+        element_id: 构件 ID
+        element_type: 构件类型
+        stress_ratio: 当前应力比 (应力/屈服强度)
+        importance_score: 重要性系数 (基于传力路径, 0-1)
+        displacement_impact: 拆除后最大位移增幅 (预测, m)
+        stiffness_contribution: 刚度贡献比例
+        load_path_rank: 传力路径排名 (1=最关键)
+        recommendation: 是否建议优先拆除
+        explanation: 自然语言解释
+    """
+    element_id: int
+    element_type: str = Field(description="构件类型")
+    stress_ratio: float = Field(default=0.0, description="应力比 (0-1)")
+    importance_score: float = Field(
+        default=0.5, description="重要性系数 (0-1, 越小越安全可拆)"
+    )
+    displacement_impact: float = Field(
+        default=0.0, description="拆除后位移增幅 (m)"
+    )
+    stiffness_contribution: float = Field(
+        default=0.0, description="刚度贡献比例"
+    )
+    load_path_rank: int = Field(default=99, description="传力路径排名")
+    recommendation: bool = Field(
+        default=False, description="是否建议优先拆除"
+    )
+    explanation: str = Field(default="", description="自然语言解释")
+
+
+class XAIReport(BaseModel):
+    """可解释AI决策报告
+
+    Attributes:
+        model_id: 模型 ID
+        overall_stability: 整体稳定性评估
+        total_elements: 总构件数
+        removable_elements: 可安全拆除的构件数
+        element_details: 各构件XAI详情
+        recommended_sequence: 推荐拆除顺序 (element_id列表)
+        summary: 总体决策摘要
+    """
+    model_id: str
+    overall_stability: str = Field(default="Stable", description="整体稳定性")
+    total_elements: int = Field(default=0)
+    removable_elements: int = Field(default=0)
+    element_details: list[ElementXAIInfo] = Field(default_factory=list)
+    recommended_sequence: list[int] = Field(default_factory=list)
+    summary: str = Field(default="", description="决策摘要")

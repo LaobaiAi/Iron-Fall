@@ -12,7 +12,7 @@ from typing import Optional
 from core.models import (
     StructureModel, DemolitionPlan, DemolitionAction,
     DemolitionResponse, AnalysisResult,
-    ChimneyModel, ChimneyStabilityReport
+    ChimneyModel, ChimneyStabilityReport, XAIReport
 )
 from engine.anastruct_adapter import AnaStructAdapter
 from engine.frame3dd import Frame3DDAdapter
@@ -713,6 +713,49 @@ async def run_chimney_deep_analysis(
             "impact_force_kn": report.impact_force,
         },
         "warnings": report.warnings,
+        "latency_ms": (time.time() - start_time) * 1000,
+    }
+
+
+# ============================================================================
+# V3.0 可解释AI (XAI) 决策接口
+# ============================================================================
+
+@app.post("/api/v1/xai/explain")
+async def explain_demolition_decision(
+    model: StructureModel,
+    analysis_result: Optional[AnalysisResult] = None,
+) -> dict:
+    """生成可解释AI决策报告
+
+    为每个构件生成详细的决策依据：
+    - 应力比 (当前应力/屈服强度)
+    - 重要性系数 (基于传力路径)
+    - 拆除后位移增幅预测
+    - 自然语言解释
+
+    Args:
+        model: 结构模型
+        analysis_result: 力学分析结果 (可选)
+
+    Returns:
+        XAI 决策报告
+    """
+    start_time = time.time()
+
+    from engine.xai_analyzer import XAIAnalyzer
+
+    analyzer = XAIAnalyzer()
+    report = analyzer.analyze(model, analysis_result)
+
+    return {
+        "success": True,
+        "report": report.model_dump(),
+        "stats": {
+            "total_elements": report.total_elements,
+            "removable": report.removable_elements,
+            "overall_stability": report.overall_stability,
+        },
         "latency_ms": (time.time() - start_time) * 1000,
     }
 
