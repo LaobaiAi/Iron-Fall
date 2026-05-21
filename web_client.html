@@ -530,6 +530,20 @@
             <div class="panel">
                 <h3 class="panel-title">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                    </svg>
+                    自然语言建模
+                </h3>
+                <div style="display:flex; gap:8px; margin-bottom:12px;">
+                    <input type="text" id="nlInput" style="flex:1; padding:10px 14px; border:1px solid rgba(255,255,255,0.15); border-radius:10px; background:rgba(255,255,255,0.05); color:#e0e0e0; font-size:0.9rem;" placeholder="例如: 建一个带X型斜撑的五层钢框架，首层高4.5m，标准层高3.6m，H400x200，Q355">
+                    <button class="btn btn-primary" onclick="parseNL()" style="white-space:nowrap;">生成模型</button>
+                </div>
+                <div id="nlStatus" style="font-size:0.8rem; color:#00ff88; margin-bottom:8px; display:none;"></div>
+            </div>
+
+            <div class="panel">
+                <h3 class="panel-title">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
                         <polyline points="14 2 14 8 20 8"></polyline>
                     </svg>
@@ -587,6 +601,14 @@
                     <div class="quick-action-card" onclick="loadDemo('validate')">
                         <div class="quick-action-title">仅验证</div>
                         <div class="quick-action-desc">快速验证模型有效性</div>
+                    </div>
+                    <div class="quick-action-card" onclick="requestSequence()">
+                        <div class="quick-action-title">智能序列</div>
+                        <div class="quick-action-desc">图论最优拆除方案</div>
+                    </div>
+                    <div class="quick-action-card" onclick="requestPrecompute()">
+                        <div class="quick-action-title">预计算</div>
+                        <div class="quick-action-desc">后台预计算分析结果</div>
                     </div>
                 </div>
 
@@ -706,6 +728,119 @@
             `;
             resultContent.innerHTML = '';
             resultContent.appendChild(card);
+        }
+
+        async function parseNL() {
+            const nlInput = document.getElementById('nlInput');
+            const nlStatus = document.getElementById('nlStatus');
+            const text = nlInput.value.trim();
+            
+            if (!text) {
+                nlStatus.style.display = 'block';
+                nlStatus.style.color = '#ff4444';
+                nlStatus.textContent = '请输入结构描述';
+                return;
+            }
+            
+            nlStatus.style.display = 'block';
+            nlStatus.style.color = '#00d9ff';
+            nlStatus.textContent = '解析中...';
+            
+            try {
+                const response = await fetch('http://localhost:8000/api/v1/model/parse', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text, model_id: 'nl_web_' + Date.now() })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    const m = data.model;
+                    const stats = data.stats;
+                    nlStatus.style.color = '#00ff88';
+                    nlStatus.textContent = `模型生成成功：${stats.nodes}节点 ${stats.elements}构件 (${stats.columns}柱 ${stats.beams}梁 ${stats.braces}撑) | ${data.latency_ms.toFixed(1)}ms`;
+                    
+                    // 自动填充到消息输入区
+                    const msgInput = document.getElementById('messageInput');
+                    const modelJSON = {
+                        type: 'demolish',
+                        model: m,
+                        action: { step: 1, target_element_ids: [m.elements[m.elements.length-1].id], action_type: 'Remove' }
+                    };
+                    msgInput.value = JSON.stringify(modelJSON, null, 2);
+                    
+                    // 渲染 3D 模型
+                    if (typeof build3DModel === 'function') {
+                        build3DModel(m);
+                    }
+                    if (typeof renderStructure === 'function') {
+                        renderStructure(m);
+                    }
+                    
+                    addLog('info', `NL解析: "${text.substring(0,40)}..." -> ${m.name} (${stats.nodes}节点)`);
+                } else {
+                    nlStatus.style.color = '#ff4444';
+                    nlStatus.textContent = '解析失败: ' + (data.error || '未知错误');
+                }
+            } catch (e) {
+                nlStatus.style.color = '#ff4444';
+                nlStatus.textContent = '连接失败: 请确保后端服务运行在 localhost:8000';
+                addLog('error', 'NL解析连接失败: ' + e.message);
+            }
+        }
+
+        async function requestSequence() {
+            addLog('info', '请求智能拆除序列...');
+            try {
+                const modelData = buildModelFromCurrentData();
+                if (!modelData) {
+                    addLog('error', '无法获取当前模型数据');
+                    return;
+                }
+                const response = await fetch('http://localhost:8000/api/v1/plan/sequence', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(modelData)
+                });
+                const data = await response.json();
+                if (data.success) {
+                    addLog('info', `序列生成: ${data.stats.total_steps}步 | 风险: ${data.stats.risk_level} | ${data.latency_ms.toFixed(1)}ms`);
+                    displayResult(data);
+                }
+            } catch (e) {
+                addLog('error', '序列请求失败: ' + e.message);
+            }
+        }
+
+        async function requestPrecompute() {
+            addLog('info', '触发预计算...');
+            try {
+                const modelData = buildModelFromCurrentData();
+                if (!modelData) {
+                    addLog('error', '无法获取当前模型数据');
+                    return;
+                }
+                const response = await fetch('http://localhost:8000/api/v1/precompute', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(modelData)
+                });
+                const data = await response.json();
+                if (data.success) {
+                    addLog('info', `预计算完成 | 缓存: ${data.cache_stats.size}项 | ${data.latency_ms.toFixed(1)}ms`);
+                }
+            } catch (e) {
+                addLog('error', '预计算失败: ' + e.message);
+            }
+        }
+
+        function buildModelFromCurrentData() {
+            try {
+                return JSON.parse(document.getElementById('messageInput').value).model || null;
+            } catch (e) {
+                return null;
+            }
         }
 
         function connect() {
@@ -1363,6 +1498,10 @@
         // 页面加载完成后初始化 Three.js
         window.addEventListener('DOMContentLoaded', () => {
             setTimeout(initThreeJS, 100);
+            // NL 输入框 Enter 键触发
+            document.getElementById('nlInput').addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') parseNL();
+            });
         });
         
         // 更新模型状态

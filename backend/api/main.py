@@ -37,9 +37,15 @@ async def lifespan(app: FastAPI):
     app.state.frame3dd = Frame3DDAdapter()         # 备选：3D 静力/动力分析
     app.state.opensees = OpenSeesPyAdapter()       # 深度：非线性复核
     
+    # 初始化预计算引擎
+    from engine.precompute import PrecomputeEngine
+    app.state.precompute = PrecomputeEngine()
+    app.state.precompute.set_engines(app.state.anastruct, app.state.frame3dd)
+    
     logger.info(f"anaStruct  状态: {app.state.anastruct.version}")
     logger.info(f"Frame3DD   状态: {app.state.frame3dd.version}")
     logger.info(f"OpenSeesPy 状态: {app.state.opensees.version}")
+    logger.info(f"预计算引擎 状态: ready")
     
     yield
     
@@ -443,6 +449,49 @@ async def get_analysis_report(model_id: str = "") -> dict:
             "pushover",          # OpenSeesPy
             "plastic_hinge",     # OpenSeesPy
         ]
+    }
+
+
+# ============================================================================
+# 预计算与缓存接口
+# ============================================================================
+
+@app.post("/api/v1/precompute")
+async def precompute_model(model: StructureModel) -> dict:
+    """预计算结构模型的所有分析结果
+    
+    后台异步预计算拆除方案、静力分析和各步骤稳定性。
+    结果存入 LRU 缓存，后续请求直接命中。
+    
+    Args:
+        model: 结构模型
+        
+    Returns:
+        预计算状态
+    """
+    start_time = time.time()
+    
+    await app.state.precompute.precompute_all(model)
+    
+    return {
+        "success": True,
+        "cache_stats": app.state.precompute.stats,
+        "model_hash": model_hash_from_precompute(model),
+        "latency_ms": (time.time() - start_time) * 1000
+    }
+
+
+def model_hash_from_precompute(model: StructureModel) -> str:
+    from engine.precompute import model_hash
+    return model_hash(model)
+
+
+@app.get("/api/v1/precompute/stats")
+async def get_cache_stats() -> dict:
+    """获取预计算缓存统计"""
+    return {
+        "success": True,
+        "cache": app.state.precompute.stats
     }
 
 
