@@ -11,7 +11,8 @@ from typing import Optional
 
 from core.models import (
     StructureModel, DemolitionPlan, DemolitionAction,
-    DemolitionResponse, AnalysisResult
+    DemolitionResponse, AnalysisResult,
+    ChimneyModel, ChimneyStabilityReport
 )
 from engine.anastruct_adapter import AnaStructAdapter
 from engine.frame3dd import Frame3DDAdapter
@@ -594,6 +595,74 @@ async def validate_demolition_plan(
         "results": results,
         "plan_risk_level": plan.risk_level,
         "latency_ms": (time.time() - start_time) * 1000
+    }
+
+
+# ============================================================================
+# V3.0 烟囱结构解析接口
+# ============================================================================
+
+@app.post("/api/v1/chimney/parse")
+async def parse_chimney_description(text: str, model_id: str = "chimney_nl") -> dict:
+    """烟囱自然语言解析
+
+    支持描述示例：
+    - "建立一个高60m、底径5m、顶径3m、壁厚0.3m的C40钢筋混凝土烟囱，顶部设5m钢制排气筒"
+    - "50m烟囱，底部直径4m，顶部2m，C30混凝土，壁厚0.25m"
+    - "高80m变截面烟囱，底径6m，在30m处直径变为4m，顶部2m，C50混凝土"
+
+    Args:
+        text: 自然语言烟囱描述
+        model_id: 模型 ID
+
+    Returns:
+        包含完整 ChimneyModel 的响应
+    """
+    start_time = time.time()
+
+    from agent.chimney_parser import ChimneyParser
+
+    parser = ChimneyParser()
+    model = parser.parse(text, model_id)
+
+    return {
+        "success": True,
+        "model": model.model_dump(),
+        "stats": {
+            "total_height": model.total_height,
+            "base_diameter": model.base_diameter,
+            "top_diameter": model.top_diameter,
+            "segments": len(model.segments),
+            "attachments": len(model.attachments),
+            "notch_height": model.notch_height,
+        },
+        "latency_ms": (time.time() - start_time) * 1000,
+    }
+
+
+@app.post("/api/v1/chimney/stability")
+async def check_chimney_stability(model: ChimneyModel) -> dict:
+    """烟囱切口后稳定性快速验算
+
+    基于变截面悬臂梁模型，计算切口形成后偏心自重矩作用下的稳定性。
+
+    Args:
+        model: 烟囱模型
+
+    Returns:
+        稳定性报告
+    """
+    start_time = time.time()
+
+    from engine.chimney_analyzer import ChimneyQuickAnalyzer
+
+    analyzer = ChimneyQuickAnalyzer()
+    report = analyzer.analyze_stability(model)
+
+    return {
+        "success": True,
+        "report": report.model_dump(),
+        "latency_ms": (time.time() - start_time) * 1000,
     }
 
 

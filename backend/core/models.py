@@ -184,3 +184,110 @@ class DemolitionResponse(BaseModel):
     analysis: Optional[AnalysisResult] = None
     message: str = ""
     latency_ms: float = 0.0
+
+
+# =============================================================================
+# V3.0 特种结构模型 - 烟囱
+# =============================================================================
+
+class ChimneySegment(BaseModel):
+    """烟囱变截面段
+
+    Attributes:
+        id: 段唯一标识符
+        bottom_elevation: 段底标高 (m)
+        top_elevation: 段顶标高 (m)
+        outer_diameter_bottom: 段底外径 (m)
+        outer_diameter_top: 段顶外径 (m)
+        wall_thickness: 壁厚 (m)
+        material: 材料名称，如 "C40"
+        reinforcement_ratio: 配筋率 (纵向钢筋)
+    """
+    id: int
+    bottom_elevation: float = Field(description="段底标高 (m)")
+    top_elevation: float = Field(description="段顶标高 (m)")
+    outer_diameter_bottom: float = Field(description="段底外径 (m)")
+    outer_diameter_top: float = Field(description="段顶外径 (m)")
+    wall_thickness: float = Field(description="壁厚 (m)")
+    material: str = Field(description="混凝土材料等级，如 C40")
+    reinforcement_ratio: float = Field(
+        default=0.008, description="纵向配筋率 (默认0.8%)"
+    )
+
+
+class ChimneyAttachment(BaseModel):
+    """烟囱顶部附属结构
+
+    Attributes:
+        name: 附属结构名称
+        height: 高度 (m)
+        diameter: 直径 (m)
+        material: 材料名称，如 "Q235"
+    """
+    name: str = Field(description="附属结构名称")
+    height: float = Field(description="高度 (m)")
+    diameter: float = Field(description="直径 (m)")
+    material: str = Field(description="材料")
+
+
+class ChimneyModel(BaseModel):
+    """烟囱结构模型 - V3.0 特种结构
+
+    支持变截面钢筋混凝土烟囱的参数化描述与力学分析。
+
+    Attributes:
+        model_id: 模型唯一标识符
+        name: 模型名称
+        total_height: 总高度 (m)
+        segments: 变截面段列表 (自上而下)
+        attachments: 顶部附属结构列表
+        base_diameter: 底部外径 (m)
+        top_diameter: 顶部外径 (m)
+        notch_height: 切口设计高度 (m)
+        notch_angle: 切口角度 (度)
+        notion_direction: 定向倾倒方向 (角度)
+    """
+    model_id: str = Field(description="模型唯一标识符")
+    name: str = Field(default="钢筋混凝土烟囱", description="模型名称")
+    total_height: float = Field(description="总高度 (m)")
+    segments: list[ChimneySegment] = Field(
+        default_factory=list, description="变截面段"
+    )
+    attachments: list[ChimneyAttachment] = Field(
+        default_factory=list, description="顶部附属结构"
+    )
+    base_diameter: float = Field(description="底部外径 (m)")
+    top_diameter: float = Field(description="顶部外径 (m)")
+    notch_height: float = Field(default=0.0, description="切口设计高度 (m)")
+    notch_angle: float = Field(default=0.0, description="切口角度 (度)")
+    notion_direction: float = Field(
+        default=0.0, description="定向倾倒方向 (度, 0=正X)"
+    )
+
+
+class ChimneyStabilityReport(BaseModel):
+    """烟囱切口后稳定性报告
+
+    Attributes:
+        model_id: 模型 ID
+        notch_height: 切口高度 (m)
+        overturning_moment: 倾覆力矩 (kN·m)
+        resisting_moment: 抗倾覆力矩 (kN·m)
+        stability_ratio: 稳定系数
+        is_stable: 是否稳定 (ratio > 1.0)
+        max_stress: 切口处最大应力 (MPa)
+        tipping_angle: 初始倾斜角度 (度)
+    """
+    model_id: str
+    notch_height: float
+    overturning_moment: float = Field(description="倾覆力矩 (kN·m)")
+    resisting_moment: float = Field(description="抗倾覆力矩 (kN·m)")
+    stability_ratio: float = Field(
+        default=1.0, description="稳定系数 (抗倾覆/倾覆)"
+    )
+    is_stable: bool = Field(default=True)
+    max_stress: float = Field(default=0.0, description="最大应力 (MPa)")
+    tipping_angle: float = Field(
+        default=0.0, description="初始倾斜角 (度)"
+    )
+    warnings: list[str] = Field(default_factory=list)
