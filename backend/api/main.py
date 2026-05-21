@@ -291,6 +291,49 @@ async def check_stability(
 
 
 # ============================================================================
+# 自然语言解析接口
+# ============================================================================
+
+@app.post("/api/v1/model/parse")
+async def parse_natural_language(
+    text: str,
+    model_id: str = "nl_model"
+) -> dict:
+    """自然语言解析：描述 → StructureModel
+    
+    支持描述示例：
+    - "建一个3层钢框架，跨度6m，层高3.6m"
+    - "建一个带X型斜撑的五层钢框架，首层高4.5m，标准层高3.6m，H400x200，Q355"
+    
+    Args:
+        text: 自然语言结构描述
+        model_id: 模型 ID
+        
+    Returns:
+        包含完整 StructureModel 的响应
+    """
+    start_time = time.time()
+    
+    from agent.parser import StructureParser
+    
+    parser = StructureParser()
+    model = parser.parse(text, model_id)
+    
+    return {
+        "success": True,
+        "model": model.model_dump(),
+        "stats": {
+            "nodes": len(model.nodes),
+            "elements": len(model.elements),
+            "columns": len([e for e in model.elements if e.element_type == "Column"]),
+            "beams": len([e for e in model.elements if e.element_type == "Beam"]),
+            "braces": len([e for e in model.elements if e.element_type == "Brace"]),
+        },
+        "latency_ms": (time.time() - start_time) * 1000
+    }
+
+
+# ============================================================================
 # AI 决策接口
 # ============================================================================
 
