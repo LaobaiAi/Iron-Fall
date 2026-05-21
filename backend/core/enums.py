@@ -20,8 +20,9 @@ class ActionType(str, Enum):
 
 class CalculationEngine(str, Enum):
     """计算引擎类型"""
-    FRAME3DD = "Frame3DD"       # 快速静力/动力求解器
-    OPENSEES = "OpenSeesPy"     # 深度非线性分析
+    ANASTRUCT = "anaStruct"     # Python 原生快速验算（主力引擎）
+    FRAME3DD = "Frame3DD"       # 3D 静力/动力求解器（降级备选）
+    OPENSEES = "OpenSeesPy"     # 深度非线性分析（核威慑复核）
 
 
 class StabilityStatus(str, Enum):

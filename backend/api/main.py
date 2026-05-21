@@ -13,6 +13,7 @@ from core.models import (
     StructureModel, DemolitionPlan, DemolitionAction,
     DemolitionResponse, AnalysisResult
 )
+from engine.anastruct_adapter import AnaStructAdapter
 from engine.frame3dd import Frame3DDAdapter
 from engine.opensees import OpenSeesPyAdapter
 from agent.agent import DemolitionAgent, SimpleDemolitionAgent
@@ -31,12 +32,14 @@ async def lifespan(app: FastAPI):
     """应用生命周期管理"""
     logger.info("Iron-Fall 后端服务启动中...")
     
-    # 初始化计算引擎
-    app.state.frame3dd = Frame3DDAdapter()
-    app.state.opensees = OpenSeesPyAdapter()
+    # 初始化计算引擎（三级体系）
+    app.state.anastruct = AnaStructAdapter()      # 主力：Python 原生快速验算
+    app.state.frame3dd = Frame3DDAdapter()         # 备选：3D 静力/动力分析
+    app.state.opensees = OpenSeesPyAdapter()       # 深度：非线性复核
     
-    logger.info(f"Frame3DD 版本: {app.state.frame3dd.version}")
-    logger.info(f"OpenSeesPy 版本: {app.state.opensees.version}")
+    logger.info(f"anaStruct  状态: {app.state.anastruct.version}")
+    logger.info(f"Frame3DD   状态: {app.state.frame3dd.version}")
+    logger.info(f"OpenSeesPy 状态: {app.state.opensees.version}")
     
     yield
     
@@ -75,6 +78,7 @@ async def health_check():
         "status": "healthy",
         "service": "Iron-Fall",
         "engines": {
+            "anastruct": app.state.anastruct.version,
             "frame3dd": app.state.frame3dd.version,
             "opensees": app.state.opensees.version
         }
@@ -97,13 +101,62 @@ async def validate_model(model: StructureModel) -> dict:
     """
     start_time = time.time()
     
-    is_valid, error = await app.state.frame3dd.validate_model(model)
+    is_valid, error = await app.state.anastruct.validate_model(model)
     
     return {
         "success": is_valid,
         "error": error,
         "latency_ms": (time.time() - start_time) * 1000
     }
+
+
+# ============================================================================
+# 级联分析辅助函数：anaStruct → Frame3DD → 降级
+# ============================================================================
+
+async def cascading_analysis(
+    model: StructureModel,
+    action: DemolitionAction = None,
+    method: str = "static"
+) -> tuple[AnalysisResult, str]:
+    """级联分析：优先 anaStruct，失败则 Frame3DD 兜底
+    
+    Args:
+        model: 结构模型
+        action: 拆除动作（可选，用于动力分析）
+        method: 分析类型 ("static" | "dynamic")
+    
+    Returns:
+        (result, engine_used)
+    """
+    # 第一级：anaStruct 快速验算
+    try:
+        if method == "dynamic" and action:
+            result = await app.state.anastruct.run_dynamic_analysis(model, action)
+        else:
+            result = await app.state.anastruct.run_static_analysis(model)
+        if result.success:
+            return result, "anaStruct"
+    except Exception as e:
+        logger.warning(f"anaStruct 分析失败，降级到 Frame3DD: {e}")
+    
+    # 第二级：Frame3DD 降级备选
+    try:
+        if method == "dynamic" and action:
+            result = await app.state.frame3dd.run_dynamic_analysis(model, action)
+        else:
+            result = await app.state.frame3dd.run_static_analysis(model)
+        return result, "Frame3DD"
+    except Exception as e:
+        logger.warning(f"Frame3DD 分析失败，使用模拟数据: {e}")
+    
+    # 第三级：完全降级（mock 数据）
+    return AnalysisResult(
+        success=False,
+        is_safe=False,
+        stability_status="Error",
+        warnings=["所有计算引擎不可用"]
+    ), "None"
 
 
 # ============================================================================
@@ -122,11 +175,12 @@ async def run_static_analysis(model: StructureModel) -> dict:
     """
     start_time = time.time()
     
-    result = await app.state.frame3dd.run_static_analysis(model)
+    result, engine = await cascading_analysis(model, method="static")
     
     return {
         "success": result.is_safe,
         "analysis": result.model_dump(),
+        "engine": engine,
         "latency_ms": (time.time() - start_time) * 1000
     }
 
@@ -151,11 +205,12 @@ async def run_dynamic_analysis(
     """
     start_time = time.time()
     
-    result = await app.state.frame3dd.run_dynamic_analysis(model, action)
+    result, engine = await cascading_analysis(model, action, method="dynamic")
     
     return {
         "success": result.is_safe,
         "analysis": result.model_dump(),
+        "engine": engine,
         "latency_ms": (time.time() - start_time) * 1000
     }
 
@@ -223,7 +278,7 @@ async def check_stability(
     """
     start_time = time.time()
     
-    is_stable, max_disp = await app.state.frame3dd.check_stability(
+    is_stable, max_disp = await app.state.anastruct.check_stability(
         model, threshold
     )
     
@@ -300,7 +355,7 @@ async def validate_demolition_plan(
     )
     
     for action in plan.actions:
-        is_valid, error = await app.state.frame3dd.validate_model(cumulative_model)
+        is_valid, error = await app.state.anastruct.validate_model(cumulative_model)
         
         if not is_valid:
             results.append({
@@ -310,7 +365,7 @@ async def validate_demolition_plan(
             })
             continue
         
-        is_stable, max_disp = await app.state.frame3dd.check_stability(
+        is_stable, max_disp = await app.state.anastruct.check_stability(
             cumulative_model
         )
         
@@ -371,9 +426,6 @@ async def websocket_demolition(websocket: WebSocket):
     """
     await manager.connect(websocket)
     
-    # 获取引擎实例
-    frame3dd = app.state.frame3dd
-    
     try:
         while True:
             data = await websocket.receive_json()
@@ -389,15 +441,16 @@ async def websocket_demolition(websocket: WebSocket):
                     model = StructureModel(**data.get("model", {}))
                     action = DemolitionAction(**data.get("action", {}))
                     
-                    # 执行分析
-                    result = await frame3dd.run_dynamic_analysis(
-                        model, action
+                    # 级联分析：anaStruct → Frame3DD
+                    result, engine = await cascading_analysis(
+                        model, action, method="dynamic"
                     )
                     
                     response = {
                         "type": "result",
                         "success": result.is_safe,
                         "analysis": result.model_dump(),
+                        "engine": engine,
                         "latency_ms": (time.time() - start_time) * 1000
                     }
                     
@@ -419,7 +472,7 @@ async def websocket_demolition(websocket: WebSocket):
             elif msg_type == "validate":
                 try:
                     model = StructureModel(**data.get("model", {}))
-                    is_valid, error = await frame3dd.validate_model(model)
+                    is_valid, error = await app.state.anastruct.validate_model(model)
                     
                     await websocket.send_json({
                         "type": "validation_result",
@@ -431,6 +484,27 @@ async def websocket_demolition(websocket: WebSocket):
                     await websocket.send_json({
                         "type": "validation_result",
                         "is_valid": False,
+                        "error": str(e)
+                    })
+            
+            elif msg_type == "analyze_static":
+                start_time = time.time()
+                try:
+                    model = StructureModel(**data.get("model", {}))
+                    result, engine = await cascading_analysis(model, method="static")
+                    
+                    await websocket.send_json({
+                        "type": "analysis_result",
+                        "success": result.is_safe,
+                        "analysis": result.model_dump(),
+                        "engine": engine,
+                        "latency_ms": (time.time() - start_time) * 1000
+                    })
+                except Exception as e:
+                    logger.error(f"Analyze 处理错误: {e}")
+                    await websocket.send_json({
+                        "type": "analysis_result",
+                        "success": False,
                         "error": str(e)
                     })
             

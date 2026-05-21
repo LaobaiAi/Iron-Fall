@@ -144,12 +144,16 @@ class AnalysisResult(BaseModel):
     """分析结果模型 - 力学计算结果
 
     Attributes:
+        success: 分析是否成功完成
         node_displacements: 节点位移字典 {node_id: [Ux, Uy, Uz, Rx, Ry, Rz]}
         element_stresses: 构件应力字典 {element_id: stress_value}
         max_displacement: 最大位移值
         stability_status: 稳定性状态
         is_safe: 是否安全可执行
+        warnings: 警告信息列表
+        engine_info: 使用的计算引擎信息
     """
+    success: bool = Field(default=True, description="分析是否成功完成")
     node_displacements: dict[int, list[float]] = Field(
         default_factory=dict,
         description="节点位移 {node_id: [Ux, Uy, Uz, Rx, Ry, Rz]}"
@@ -159,9 +163,10 @@ class AnalysisResult(BaseModel):
         description="构件应力 {element_id: stress_MPa}"
     )
     max_displacement: float = Field(default=0.0, description="最大位移 (m)")
-    stability_status: Literal["Stable", "Unstable", "Critical", "Collapse"] = "Stable"
+    stability_status: Literal["Stable", "Unstable", "Critical", "Collapse", "Error", "Timeout"] = "Stable"
     is_safe: bool = Field(default=True, description="是否安全可执行")
     warnings: list[str] = Field(default_factory=list, description="警告信息")
+    engine_info: str = Field(default="", description="使用的计算引擎信息")
 
 
 class DemolitionResponse(BaseModel):

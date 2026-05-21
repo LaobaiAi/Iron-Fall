@@ -84,7 +84,7 @@ class TestFrame3DDAdapter:
     def test_adapter_initialization(self, adapter):
         """测试适配器初始化"""
         assert adapter.name == "Frame3DD"
-        assert adapter._timeout == 2.0
+        assert adapter._timeout == 10.0
 
     @pytest.mark.asyncio
     async def test_validate_model_success(self, adapter, simple_model):
